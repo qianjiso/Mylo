@@ -1,0 +1,139 @@
+{
+  "name": "password-manager",
+  "version": "1.0.0",
+  "description": "一个安全的跨平台密码管理应用",
+  "main": "dist/main/main.js",
+  "homepage": "http://./",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:main\"",
+    "dev:renderer": "webpack serve --config webpack.renderer.config.js",
+    "dev:main": "webpack --config webpack.main.config.js --watch",
+    "build": "npm run build:renderer && npm run build:main",
+    "build:renderer": "webpack --config webpack.renderer.config.js --mode production",
+    "build:main": "webpack --config webpack.main.config.js --mode production",
+    "start": "node scripts/start-electron.js",
+    "pack": "electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "eslint src --ext .ts,.tsx",
+    "lint:fix": "eslint src --ext .ts,.tsx --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,md}\""
+  },
+  "keywords": [
+    "password",
+    "manager",
+    "security",
+    "electron",
+    "react",
+    "typescript"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.4",
+    "@types/crypto-js": "^4.2.1",
+    "@types/jest": "^29.5.8",
+    "@types/node": "^20.9.0",
+    "@types/react": "^18.2.37",
+    "@types/react-dom": "^18.2.15",
+    "@typescript-eslint/eslint-plugin": "^6.11.0",
+    "@typescript-eslint/parser": "^6.11.0",
+    "concurrently": "^8.2.2",
+    "css-loader": "^6.8.1",
+    "electron": "^27.1.3",
+    "electron-builder": "^24.6.4",
+    "eslint": "^8.54.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.1",
+    "eslint-plugin-react": "^7.33.2",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "html-webpack-plugin": "^5.5.3",
+    "jest": "^29.7.0",
+    "prettier": "^3.1.0",
+    "process": "^0.11.10",
+    "style-loader": "^3.3.3",
+    "ts-jest": "^29.1.1",
+    "ts-loader": "^9.5.0",
+    "typescript": "^5.2.2",
+    "wait-on": "^7.2.0",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.1"
+  },
+  "dependencies": {
+    "antd": "^5.11.5",
+    "better-sqlite3": "^8.7.0",
+    "buffer": "^6.0.3",
+    "crypto-browserify": "^3.12.1",
+    "crypto-js": "^4.2.0",
+    "electron-store": "^8.1.0",
+    "electron-updater": "^6.1.7",
+    "events": "^3.3.0",
+    "path-browserify": "^1.0.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.18.0",
+    "stream-browserify": "^3.0.0"
+  },
+  "build": {
+    "appId": "com.yourcompany.password-manager",
+    "productName": "Password Manager",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "assets/icons/icon.icns"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icons/icon.ico"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icons/icon.png",
+      "category": "Utility"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "your-username",
+      "repo": "password-manager"
+    }
+  }
+}

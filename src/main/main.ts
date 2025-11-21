@@ -1,0 +1,417 @@
+import { app, BrowserWindow, ipcMain } from 'electron';
+import * as path from 'path';
+import DatabaseService from './database/DatabaseService';
+
+class PasswordManagerApp {
+  private mainWindow: BrowserWindow | null = null;
+  private databaseService: DatabaseService | null = null;
+
+  constructor() {
+    this.init();
+  }
+
+  private async init(): Promise<void> {
+    // 设置应用程序用户模型ID (Windows)
+    if (process.platform === 'win32') {
+      app.setAppUserModelId('com.passwordmanager.app');
+    }
+
+    // 当 Electron 完成初始化并准备创建浏览器窗口时调用此方法
+    app.whenReady().then(async () => {
+       try {
+         // 初始化数据库服务
+         this.databaseService = new DatabaseService();
+         
+         // 设置IPC处理器
+         this.setupIpcHandlers();
+         
+         // 创建主窗口
+         this.createMainWindow();
+       } catch (error) {
+         console.error('Failed to initialize app:', error);
+         app.quit();
+       }
+      
+      app.on('activate', () => {
+        // 在 macOS 上，当单击 dock 图标并且没有其他窗口打开时，
+        // 通常在应用程序中重新创建一个窗口
+        if (BrowserWindow.getAllWindows().length === 0) {
+          this.createMainWindow();
+        }
+      });
+    });
+
+    // 当所有窗口都关闭时退出应用
+    app.on('window-all-closed', () => {
+      // 在 macOS 上，应用程序及其菜单栏通常保持活动状态，
+      // 直到用户使用 Cmd + Q 明确退出
+      if (process.platform !== 'darwin') {
+        app.quit();
+      }
+    });
+
+    app.on('before-quit', () => {
+      if (this.databaseService) {
+        this.databaseService.close();
+      }
+    });
+  }
+
+  private createMainWindow(): void {
+    // 创建浏览器窗口
+    this.mainWindow = new BrowserWindow({
+      width: 1200,
+      height: 800,
+      minWidth: 800,
+      minHeight: 600,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(__dirname, 'preload.js')
+      },
+      titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+      show: false // 先不显示，等加载完成后再显示
+    });
+
+    // 加载应用
+    if (process.env.NODE_ENV === 'development') {
+      this.mainWindow.loadURL('http://localhost:3000');
+      // 开发模式下打开开发者工具
+      this.mainWindow.webContents.openDevTools();
+    } else {
+      this.mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+    }
+
+    // 当窗口准备好显示时显示窗口
+    this.mainWindow.once('ready-to-show', () => {
+      this.mainWindow?.show();
+    });
+
+    // 当窗口关闭时清理
+    this.mainWindow.on('closed', () => {
+      this.mainWindow = null;
+    });
+  }
+
+  private setupIpcHandlers(): void {
+    if (!this.databaseService) return;
+
+    // 获取所有密码
+    ipcMain.handle('get-passwords', async (_, groupId?: number) => {
+      return this.databaseService!.getPasswords(groupId);
+    });
+
+    // 添加新密码
+    ipcMain.handle('add-password', async (_, password) => {
+      const id = this.databaseService!.savePassword(password);
+      return { success: true, id };
+    });
+
+    // 更新密码
+    ipcMain.handle('update-password', async (_, id, password) => {
+      const updatedPassword = { ...password, id };
+      this.databaseService!.savePassword(updatedPassword);
+      return { success: true };
+    });
+
+    // 删除密码
+    ipcMain.handle('delete-password', async (_, id) => {
+      const success = this.databaseService!.deletePassword(id);
+      return { success };
+    });
+
+    // 获取密码历史记录
+    ipcMain.handle('get-password-history', async (_, passwordId: number) => {
+      return this.databaseService!.getPasswordHistory(passwordId);
+    });
+
+    // 获取需要更新密码的列表
+    ipcMain.handle('get-passwords-needing-update', async () => {
+      return this.databaseService!.getPasswordsNeedingUpdate();
+    });
+
+    // 分组相关
+    ipcMain.handle('get-groups', async () => {
+      return this.databaseService!.getGroups();
+    });
+
+    ipcMain.handle('get-group-tree', async (_, parentId?: number) => {
+      return this.databaseService!.getGroupWithChildren(parentId);
+    });
+
+    ipcMain.handle('add-group', async (_, group) => {
+      try {
+        const id = this.databaseService!.saveGroup(group);
+        return { success: true, id };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('update-group', async (_, id, group) => {
+      try {
+        const updatedGroup = { ...group, id };
+        this.databaseService!.saveGroup(updatedGroup);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('delete-group', async (_, id) => {
+      const success = this.databaseService!.deleteGroup(id);
+      return { success };
+    });
+
+    
+
+    // 生成密码
+    ipcMain.handle('generate-password', async (_, options) => {
+      const length = options.length || 16;
+      let charset = '';
+      
+      if (options.includeUppercase) charset += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      if (options.includeLowercase) charset += 'abcdefghijklmnopqrstuvwxyz';
+      if (options.includeNumbers) charset += '0123456789';
+      if (options.includeSymbols) charset += '!@#$%^&*()_+-=[]{}|;:,.<>?';
+      
+      if (!charset) charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      
+      let password = '';
+      for (let i = 0; i < length; i++) {
+        password += charset.charAt(Math.floor(Math.random() * charset.length));
+      }
+      return password;
+    });
+
+    // 获取应用版本
+    ipcMain.handle('get-version', async () => {
+      return app.getVersion();
+    });
+
+    // 退出应用
+    ipcMain.handle('quit', async () => {
+      app.quit();
+    });
+
+    // 导出数据
+    ipcMain.handle('export-data', async (_, options: {
+      format: 'json' | 'csv' | 'encrypted_zip';
+      includeHistory: boolean;
+      includeGroups: boolean;
+      includeSettings: boolean;
+      passwordStrength: 'weak' | 'medium' | 'strong';
+      compressionLevel: number;
+    }) => {
+      try {
+        const data = await this.databaseService!.exportData(options);
+        return { success: true, data: Array.from(data) };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    // 导入数据
+    ipcMain.handle('import-data', async (_, data: number[], options: {
+      format: 'json' | 'csv';
+      mergeStrategy: 'replace' | 'merge' | 'skip';
+      validateIntegrity: boolean;
+      dryRun: boolean;
+    }) => {
+      try {
+        const uint8Array = new Uint8Array(data);
+        const result = await this.databaseService!.importData(uint8Array, options);
+        return { success: true, data: result };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    // 用户设置相关
+    ipcMain.handle('get-user-settings', async (_, category?: string) => {
+      return this.databaseService!.getUserSettings(category);
+    });
+
+    ipcMain.handle('get-user-setting', async (_, key: string) => {
+      return this.databaseService!.getUserSettingByKey(key);
+    });
+
+    ipcMain.handle('set-user-setting', async (_, key: string, value: string, type?: string, category?: string, description?: string) => {
+      try {
+        const setting = {
+          key,
+          value,
+          type: (type || 'string') as 'string' | 'number' | 'boolean' | 'json',
+          category: category || 'general',
+          description: description || ''
+        };
+        const success = this.databaseService!.saveUserSetting(setting);
+        return { success };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('update-user-setting', async (_, key: string, value: string) => {
+      try {
+        const success = this.databaseService!.updateUserSetting(key, value);
+        return { success };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('delete-user-setting', async (_, key: string) => {
+      try {
+        const success = this.databaseService!.deleteUserSetting(key);
+        return { success };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('get-user-settings-categories', async () => {
+      return this.databaseService!.getUserSettingsCategories();
+    });
+
+    // 搜索密码
+    ipcMain.handle('search-passwords', async (_, keyword: string) => {
+      return this.databaseService!.searchPasswords(keyword);
+    });
+
+    // 数据完整性检查
+  ipcMain.handle('check-data-integrity', async () => {
+    try {
+      const result = this.databaseService!.checkDataIntegrity();
+      return { success: true, data: result };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // 数据完整性修复
+  ipcMain.handle('repair-data-integrity', async () => {
+    try {
+      const result = this.databaseService!.repairDataIntegrity();
+      return { success: true, data: result };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  // 高级搜索
+    ipcMain.handle('advanced-search', async (_, options: any) => {
+      return this.databaseService!.advancedSearch(options);
+    });
+
+    // 获取单个密码详情
+    ipcMain.handle('get-password', async (_, id: number) => {
+      return this.databaseService!.getPasswordById(id);
+    });
+
+    // 多账号密码管理
+    ipcMain.handle('get-password-multi-accounts', async (_, id: number) => {
+      return this.databaseService!.getPasswordMultiAccounts(id);
+    });
+
+    ipcMain.handle('set-password-multi-accounts', async (_, id: number, accounts: string) => {
+      try {
+        this.databaseService!.setPasswordMultiAccounts(id, accounts);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    // 更新密码（记录历史）
+    ipcMain.handle('update-password-with-history', async (_, id: number, newPassword: string, reason?: string) => {
+      try {
+        this.databaseService!.updatePassword(id, newPassword, reason);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    // 分组相关扩展
+    ipcMain.handle('get-group-by-id', async (_, id: number) => {
+      return this.databaseService!.getGroupById(id);
+    });
+
+    ipcMain.handle('get-group-by-name', async (_, name: string, parentId?: number) => {
+      return this.databaseService!.getGroupByName(name, parentId);
+    });
+
+    // 用户设置扩展
+    ipcMain.handle('reset-setting-to-default', async (_, key: string) => {
+      try {
+        const success = this.databaseService!.resetSettingToDefault(key);
+        return { success };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('reset-all-settings-to-default', async () => {
+      try {
+        const count = this.databaseService!.resetAllSettingsToDefault();
+        return { success: true, count };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('import-settings', async (_, settings: any[]) => {
+      try {
+        const count = this.databaseService!.importSettings(settings);
+        return { success: true, count };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('export-settings', async (_, categories?: string[]) => {
+      try {
+        const settings = this.databaseService!.exportSettings(categories);
+        return { success: true, data: JSON.stringify(settings) };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    // 密码历史记录扩展
+    ipcMain.handle('add-password-history', async (_, history: any) => {
+      try {
+        const id = this.databaseService!.addPasswordHistory(history);
+        return { success: true, id };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('get-history-by-id', async (_, id: number) => {
+      return this.databaseService!.getHistoryById(id);
+    });
+
+    ipcMain.handle('delete-history', async (_, id: number) => {
+      try {
+        this.databaseService!.deleteHistory(id);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('clean-old-history', async (_, daysToKeep?: number) => {
+      try {
+        const count = this.databaseService!.cleanOldHistory(daysToKeep);
+        return { success: true, count };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+  }
+}
+
+// 创建应用实例
+new PasswordManagerApp();
