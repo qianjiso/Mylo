@@ -6,11 +6,7 @@ import {
   Input, 
   Space, 
   message, 
-  Modal, 
   Form,
-  Row,
-  Col,
-  Divider,
   Tooltip,
   Popconfirm
 } from 'antd';
@@ -35,7 +31,7 @@ interface MultiAccountManagerProps {
 }
 
 const MultiAccountManager: React.FC<MultiAccountManagerProps> = ({
-  passwordId,
+  passwordId: _passwordId,
   initialData = '',
   onSave,
   readonly = false

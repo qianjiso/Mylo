@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Button, Table, Modal, Form, Input, message, Space, Popconfirm, Tree, Select, Tabs, Tag, Typography, Tooltip } from 'antd';
+import { Layout, Button, Table, Modal, Form, Input, message, Space, Popconfirm, Tree, Select, Tag, Tooltip } from 'antd';
 import { formatTimestamp } from './utils/time';
-import { PlusOutlined, EditOutlined, DeleteOutlined, KeyOutlined, SettingOutlined, FolderOutlined, HistoryOutlined, FolderAddOutlined, EyeOutlined, EyeInvisibleOutlined, DownloadOutlined, UploadOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, DeleteOutlined, KeyOutlined, SettingOutlined, FolderOutlined, HistoryOutlined, FolderAddOutlined, EyeOutlined, EyeInvisibleOutlined, DownloadOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { DataNode } from 'antd/es/tree';
 import PasswordGenerator from './components/PasswordGenerator';
@@ -19,9 +19,7 @@ if (typeof window !== 'undefined' && !window.electronAPI) {
 }
 
 const { Header, Content, Sider } = Layout;
-const { TabPane } = Tabs;
 const { Option } = Select;
-const { Title } = Typography;
 
 const groupColorMap: Record<string, string> = {
   blue: '#1677ff',
@@ -92,7 +90,7 @@ const App: React.FC = () => {
     } else if (!searchQuery) {
       loadRecentPasswords();
     }
-  }, [selectedGroupId]);
+  }, [selectedGroupId, searchQuery]);
 
   const loadPasswords = async (groupId?: number) => {
     setLoading(true);

@@ -12,7 +12,6 @@ import {
   Upload,
   message,
   Radio,
-  Progress,
   Alert,
 } from 'antd';
 import {
@@ -33,21 +32,7 @@ interface ImportExportModalProps {
   onClose: () => void;
 }
 
-interface ExportOptions {
-  format: 'json' | 'csv' | 'encrypted_zip';
-  includeHistory: boolean;
-  includeGroups: boolean;
-  includeSettings: boolean;
-  passwordStrength: 'weak' | 'medium' | 'strong';
-  compressionLevel: number;
-}
-
-interface ImportOptions {
-  format: 'json' | 'csv';
-  mergeStrategy: 'replace' | 'merge' | 'skip';
-  validateIntegrity: boolean;
-  dryRun: boolean;
-}
+ 
 
 const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose }) => {
   const [mode, setMode] = useState<'export' | 'import'>('export');

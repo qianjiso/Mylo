@@ -1,30 +1,30 @@
 // Mock electronAPI for browser development
 const electronAPI = {
   // 密码管理相关
-  getPasswords: (groupId?: number) => Promise.resolve([]),
-  getPassword: (id: number) => Promise.resolve(null),
-  addPassword: (password: any) => Promise.resolve({ success: true, id: Date.now() }),
-  updatePassword: (id: number, password: any) => Promise.resolve({ success: true }),
-  deletePassword: (id: number) => Promise.resolve({ success: true }),
-  searchPasswords: (keyword: string) => Promise.resolve([]),
+  getPasswords: (_groupId?: number) => Promise.resolve([]),
+  getPassword: (_id: number) => Promise.resolve(null),
+  addPassword: (_password: any) => Promise.resolve({ success: true, id: Date.now() }),
+  updatePassword: (_id: number, _password: any) => Promise.resolve({ success: true }),
+  deletePassword: (_id: number) => Promise.resolve({ success: true }),
+  searchPasswords: (_keyword: string) => Promise.resolve([]),
   
   // 密码历史记录
-  getPasswordHistory: (passwordId: number) => Promise.resolve([]),
+  getPasswordHistory: (_passwordId: number) => Promise.resolve([]),
   getPasswordsNeedingUpdate: () => Promise.resolve([]),
   
   // 分组管理
   getGroups: () => Promise.resolve([]),
-  getGroupTree: (parentId?: number) => Promise.resolve([]),
-  addGroup: (group: any) => Promise.resolve({ success: true, id: Date.now() }),
-  updateGroup: (id: number, group: any) => Promise.resolve({ success: true }),
-  deleteGroup: (id: number) => Promise.resolve({ success: true }),
+  getGroupTree: (_parentId?: number) => Promise.resolve([]),
+  addGroup: (_group: any) => Promise.resolve({ success: true, id: Date.now() }),
+  updateGroup: (_id: number, _group: any) => Promise.resolve({ success: true }),
+  deleteGroup: (_id: number) => Promise.resolve({ success: true }),
   
   // 用户设置
-  getUserSettings: (category?: string) => Promise.resolve([]),
-  getUserSetting: (key: string) => Promise.resolve(null),
-  setUserSetting: (key: string, value: string, type?: string, category?: string, description?: string) => Promise.resolve({ success: true }),
-  updateUserSetting: (key: string, value: string) => Promise.resolve({ success: true }),
-  deleteUserSetting: (key: string) => Promise.resolve({ success: true }),
+  getUserSettings: (_category?: string) => Promise.resolve([]),
+  getUserSetting: (_key: string) => Promise.resolve(null),
+  setUserSetting: (_key: string, _value: string, _type?: string, _category?: string, _description?: string) => Promise.resolve({ success: true }),
+  updateUserSetting: (_key: string, _value: string) => Promise.resolve({ success: true }),
+  deleteUserSetting: (_key: string) => Promise.resolve({ success: true }),
   getUserSettingsCategories: () => Promise.resolve([]),
   
   // 密码生成
@@ -58,7 +58,7 @@ const electronAPI = {
   
   // 文件操作
   exportData: () => Promise.resolve({ success: true, data: '{}' }),
-  importData: (data: string) => Promise.resolve({ success: true })
+  importData: (_data: number[], _options?: any) => Promise.resolve({ success: true })
 };
 
 // 在浏览器环境中，将electronAPI挂载到window对象上

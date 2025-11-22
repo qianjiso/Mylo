@@ -8,24 +8,19 @@ import {
   Space, 
   message,
   Typography,
-  Divider,
   Row,
   Col,
-  Card,
   Radio
 } from 'antd';
 import { 
   CopyOutlined, 
-  EyeOutlined, 
-  EyeInvisibleOutlined,
-  SaveOutlined,
   EditOutlined,
   DeleteOutlined
 } from '@ant-design/icons';
 import MultiAccountManager from './MultiAccountManager';
 import PasswordGenerator from './PasswordGenerator';
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 const { TextArea } = Input;
 const { Option } = Select;
  
@@ -93,7 +88,7 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
       setLoading(true);
 
       // 根据密码类型处理数据
-      let passwordData = {
+      const passwordData = {
         ...values,
       };
 

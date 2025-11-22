@@ -17,7 +17,7 @@ export function formatTimestamp(value: string, locale: string = 'zh-CN'): string
     d = toDate(ms);
   }
   if (!d) return value;
-  return d.toLocaleString(locale, {
+  const opts: Intl.DateTimeFormatOptions = {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -25,5 +25,6 @@ export function formatTimestamp(value: string, locale: string = 'zh-CN'): string
     minute: '2-digit',
     second: '2-digit',
     hour12: false
-  } as any);
+  };
+  return d.toLocaleString(locale, opts);
 }

@@ -16,7 +16,13 @@ const PasswordGenerator: React.FC<PasswordGeneratorProps> = ({
   const [generatedPassword, setGeneratedPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const generatePassword = async (values: any) => {
+  const generatePassword = async (values: {
+    length?: number;
+    includeUppercase?: boolean;
+    includeLowercase?: boolean;
+    includeNumbers?: boolean;
+    includeSymbols?: boolean;
+  }) => {
     setLoading(true);
     try {
       const password = await window.electronAPI.generatePassword(values);

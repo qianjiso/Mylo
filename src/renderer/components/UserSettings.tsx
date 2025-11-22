@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { 
   Card, 
   Form, 
-  Input, 
   Switch, 
   Select, 
   Button, 
@@ -12,13 +11,12 @@ import {
   Typography,
   Row,
   Col,
-  InputNumber,
-  ColorPicker
+  InputNumber
 } from 'antd';
 import { SaveOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { UserSetting } from '../../main/preload';
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 const { Option } = Select;
 
 interface UserSettingsProps {
@@ -28,19 +26,13 @@ interface UserSettingsProps {
 const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
-  const [settings, setSettings] = useState<UserSetting[]>([]);
+  
 
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
-  const loadSettings = async () => {
+useEffect(() => {
+  const load = async () => {
     try {
       setLoading(true);
       const settingsData = await window.electronAPI.getUserSettings();
-      setSettings(settingsData as UserSetting[]);
-      
-      // 将设置转换为表单数据
       const formData: Record<string, any> = {};
       settingsData.forEach((setting: UserSetting) => {
         if (setting.type === 'boolean') {
@@ -51,7 +43,6 @@ const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
           formData[setting.key] = setting.value;
         }
       });
-      
       form.setFieldsValue(formData);
     } catch (error) {
       console.error('加载设置失败:', error);
@@ -60,6 +51,8 @@ const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
       setLoading(false);
     }
   };
+  load();
+}, [form]);
 
   const handleSave = async () => {
     try {

@@ -1,65 +1,19 @@
 import Database from 'better-sqlite3';
 import * as path from 'path';
-import * as GroupsRepo from '../repositories/groups';
-import * as crypto from 'crypto';
+import GroupService, { Group, GroupWithChildren } from '../services/GroupService';
+import PasswordService, { PasswordItem, PasswordHistory } from '../services/PasswordService';
+import SettingsService, { UserSetting, UserSettingsCategory } from '../services/SettingsService';
+import { createCrypto } from '../../shared/security/crypto';
 
-export interface Group {
-  id?: number;
-  name: string;
-  parent_id?: number;
-  color?: string;
-  order_index?: number;
-  sort?: number;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface GroupWithChildren extends Group {
-  children: GroupWithChildren[];
-}
-
-export interface PasswordItem {
-  id?: number;
-  title: string;
-  username: string;
-  password: string;
-  url?: string;
-  notes?: string;
-  multi_accounts?: string; // 多账号密码信息，纯文本格式，加密存储
-  group_id?: number;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface PasswordHistory {
-  id?: number;
-  password_id: number;
-  old_password: string;
-  new_password: string;
-  changed_at: string;
-  changed_reason?: string;
-}
-
-export interface UserSetting {
-  id?: number;
-  key: string;
-  value: string;
-  type?: 'string' | 'number' | 'boolean' | 'json';
-  category?: string;
-  description?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface UserSettingsCategory {
-  category: string;
-  description: string;
-  settings: UserSetting[];
-}
+// 类型定义由模块服务导出，保持单一来源
 
 export class DatabaseService {
   private db: Database.Database | null = null;
   private encryptionKey: string;
+  private groupService!: GroupService;
+  private passwordService!: PasswordService;
+  private settingsService!: SettingsService;
+  private cryptoAdapter!: { encrypt: (text: string) => string; decrypt: (text: string) => string };
 
   constructor() {
     // 从环境变量或默认值获取加密密钥
@@ -80,6 +34,11 @@ export class DatabaseService {
       this.db = new Database(dbPath);
       this.db.pragma('journal_mode = WAL');
       this.createTables();
+      // 初始化三大模块服务
+      this.cryptoAdapter = createCrypto(this.encryptionKey);
+      this.groupService = new GroupService(this.db);
+      this.passwordService = new PasswordService(this.db, this.cryptoAdapter);
+      this.settingsService = new SettingsService(this.db);
     } catch (error) {
       console.error('Database initialization error:', error);
       throw error;
@@ -207,31 +166,11 @@ export class DatabaseService {
   }
 
   private encrypt(text: string): string {
-    const iv = crypto.randomBytes(16);
-    const key = crypto.pbkdf2Sync(this.encryptionKey, 'salt', 10000, 32, 'sha256');
-    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
-    let encrypted = cipher.update(text, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
-    return iv.toString('hex') + ':' + encrypted;
+    return this.cryptoAdapter.encrypt(text);
   }
 
   private decrypt(encryptedText: string): string {
-    try {
-      const parts = encryptedText.split(':');
-      if (parts.length !== 2) {
-        return encryptedText; // 可能是未加密的文本
-      }
-      const iv = Buffer.from(parts[0], 'hex');
-      const encrypted = parts[1];
-      const key = crypto.pbkdf2Sync(this.encryptionKey, 'salt', 10000, 32, 'sha256');
-      const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-      let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-      decrypted += decipher.final('utf8');
-      return decrypted;
-    } catch (error) {
-      // 如果解密失败，可能是未加密的文本
-      return encryptedText;
-    }
+    return this.cryptoAdapter.decrypt(encryptedText);
   }
 
   // 初始化默认设置
@@ -504,115 +443,25 @@ export class DatabaseService {
 
   // 分组相关方法
   public getGroups(): Group[] {
-    if (!this.db) throw new Error('Database not initialized');
-    const groups = GroupsRepo.getGroups(this.db) as Group[];
-    
-    // 确保颜色字段有默认值
-    return groups.map(group => ({
-      ...group,
-      color: group.color || 'blue'
-    }));
+    return this.groupService.getGroups();
   }
 
   public getGroupWithChildren(parentId?: number): GroupWithChildren[] {
-    const groups = this.getGroups();
-    return this.buildGroupTree(groups, parentId);
+    return this.groupService.getGroupWithChildren(parentId);
   }
 
-  private buildGroupTree(groups: Group[], parentId?: number): GroupWithChildren[] {
-    const targetParentId = parentId === undefined ? null : parentId;
-    return groups
-      .filter(group => (group.parent_id ?? null) === targetParentId)
-      .sort((a, b) => (a.sort || 0) - (b.sort || 0))
-      .map(group => ({
-        ...group,
-        color: group.color || 'blue',
-        children: group.id ? this.buildGroupTree(groups, group.id) : []
-      }));
-  }
+  
 
   public saveGroup(group: Group): number {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    // 验证分组数据
-    this.validateGroup(group);
-    
-    // 检查分组名称唯一性
-    const existingGroup = this.getGroupByName(group.name, group.parent_id);
-    if (existingGroup && existingGroup.id !== group.id) {
-      throw new Error('分组名称已存在');
-    }
-    
-    // 验证外键约束
-    if (group.parent_id) {
-      this.validateForeignKey('groups', group.parent_id);
-      // 检查循环引用
-      if (group.id) {
-        this.validateNoCircularReference(group.id, group.parent_id);
-      }
-    }
-    
-    const now = new Date().toISOString();
-    const color = group.color || 'blue';
-    const parentId = group.parent_id ?? null;
-    
-    if (group.id) {
-      // 更新现有分组
-      const current = this.db.prepare('SELECT parent_id, order_index, sort FROM groups WHERE id = ?').get(group.id) as { parent_id?: number; order_index: number; sort: number } | undefined;
-      let sortValue = group.sort ?? current?.sort ?? 0;
-      if (current && (current.parent_id ?? null) !== parentId) {
-        if (group.sort == null) {
-          sortValue = this.getNextGroupSort(parentId ?? undefined);
-        }
-      }
-
-      const stmt = this.db.prepare(`
-        UPDATE groups 
-        SET name = ?, parent_id = ?, color = ?, sort = ?, updated_at = ? 
-        WHERE id = ?
-      `);
-      stmt.run(group.name, parentId, color, sortValue, now, group.id);
-      return group.id;
-    } else {
-      // 添加新分组
-      const sortValue = group.sort ?? this.getNextGroupSort(parentId ?? undefined);
-      const stmt = this.db.prepare(`
-        INSERT INTO groups (name, parent_id, color, sort, created_at, updated_at) 
-        VALUES (?, ?, ?, ?, ?, ?)
-      `);
-      const result = stmt.run(group.name, parentId, color, sortValue, now, now);
-      return result.lastInsertRowid as number;
-    }
+    return this.groupService.saveGroup(group);
   }
 
   public getGroupByName(name: string, parentId?: number): Group | undefined {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    const stmt = this.db.prepare('SELECT * FROM groups WHERE name = ? AND parent_id = ?');
-    const result = stmt.get(name, parentId || null) as Group;
-    
-    // 确保颜色字段有默认值
-    if (result) {
-      result.color = result.color || 'blue';
-    }
-    
-    return result;
+    return this.groupService.getGroupByName(name, parentId);
   }
 
   public deleteGroup(id: number): boolean {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    try {
-      const stmt = this.db.prepare('DELETE FROM groups WHERE id = ?');
-      const result = stmt.run(id);
-      if (result.changes > 0) {
-        this.recalculateGroupOrder();
-      }
-      return result.changes > 0;
-    } catch (error) {
-      console.error('Error deleting group:', error);
-      return false;
-    }
+    return this.groupService.deleteGroup(id);
   }
 
   
@@ -723,21 +572,23 @@ export class DatabaseService {
     if (!this.db) throw new Error('Database not initialized');
     
     switch (tableName) {
-      case 'groups':
+      case 'groups': {
         const groupStmt = this.db.prepare('SELECT id FROM groups WHERE id = ?');
         const group = groupStmt.get(id);
         if (!group) {
           throw new Error('指定的分组不存在');
         }
         break;
+      }
         
-      case 'passwords':
+      case 'passwords': {
         const passwordStmt = this.db.prepare('SELECT id FROM passwords WHERE id = ?');
         const password = passwordStmt.get(id);
         if (!password) {
           throw new Error('指定的密码不存在');
         }
         break;
+      }
         
       default:
         throw new Error(`未知的表名: ${tableName}`);
@@ -770,265 +621,51 @@ export class DatabaseService {
 
   // 密码相关方法
   public getPasswords(groupId?: number): PasswordItem[] {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    let passwords: PasswordItem[];
-    if (groupId) {
-      const stmt = this.db.prepare('SELECT * FROM passwords WHERE group_id = ? ORDER BY created_at DESC');
-      passwords = stmt.all(groupId) as PasswordItem[];
-    } else {
-      const stmt = this.db.prepare('SELECT * FROM passwords ORDER BY created_at DESC');
-      passwords = stmt.all() as PasswordItem[];
-    }
-    
-    return passwords.map(password => ({
-      ...password,
-      password: password.password ? this.decrypt(password.password) : '',
-      multi_accounts: password.multi_accounts ? this.decrypt(password.multi_accounts) : undefined
-    }));
+    return this.passwordService.getPasswords(groupId);
   }
 
   public savePassword(password: PasswordItem): number {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    try { console.log('[DB] savePassword input', { group_id: (password as any).group_id, hasPassword: !!(password as any).password, hasMultiAccounts: !!((password as any).multi_accounts || (password as any).multiAccounts) }); } catch {}
-    this.validatePassword(password);
-    
-    // 验证外键约束
-    if (password.group_id) {
-      this.validateForeignKey('groups', password.group_id);
-    }
-    
-    const now = new Date().toISOString();
-    const hasSinglePassword = !!(password.password && password.password.trim() !== '');
-    const encryptedPassword = hasSinglePassword ? this.encrypt(password.password!) : null;
-    const encryptedMultiAccounts = (password as any).multi_accounts ? this.encrypt((password as any).multi_accounts) : ((password as any).multiAccounts ? this.encrypt((password as any).multiAccounts) : null);
-    
-    if (password.id) {
-      // 更新现有密码
-      const oldPasswordStmt = this.db.prepare('SELECT password, multi_accounts FROM passwords WHERE id = ?');
-      const oldPassword = oldPasswordStmt.get(password.id) as { password: string; multi_accounts: string } | undefined;
-      
-      const stmt = this.db.prepare(`
-        UPDATE passwords 
-        SET title = ?, username = ?, password = ?, url = ?, notes = ?, multi_accounts = ?, group_id = ?, updated_at = ? 
-        WHERE id = ?
-      `);
-      stmt.run(
-        password.title,
-        password.username,
-        encryptedPassword,
-        password.url || null,
-        password.notes || null,
-        encryptedMultiAccounts,
-        password.group_id || null,
-        now,
-        password.id
-      );
-      
-      // 如果密码发生变化，记录历史
-      if (oldPassword && encryptedPassword && oldPassword.password !== encryptedPassword) {
-        this.savePasswordHistory(password.id, oldPassword.password, encryptedPassword, '手动更新');
-      }
-      
-      return password.id;
-    } else {
-      // 添加新密码
-      const stmt = this.db.prepare(`
-        INSERT INTO passwords (title, username, password, url, notes, multi_accounts, group_id, created_at, updated_at) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-      const result = stmt.run(
-        password.title,
-        password.username,
-        encryptedPassword,
-        password.url || null,
-        password.notes || null,
-        encryptedMultiAccounts,
-        password.group_id || null,
-        now,
-        now
-      );
-      try { console.log('[DB] savePassword insert', { id: result.lastInsertRowid, group_id: password.group_id }); } catch {}
-      return result.lastInsertRowid as number;
-    }
+    return this.passwordService.savePassword(password);
   }
 
   public deletePassword(id: number): boolean {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    const stmt = this.db.prepare('DELETE FROM passwords WHERE id = ?');
-    const result = stmt.run(id);
-    return result.changes > 0;
+    return this.passwordService.deletePassword(id);
   }
 
   // 用户设置相关方法
   public getUserSettings(category?: string): UserSetting[] {
-    if (!this.db) throw new Error('Database not initialized');
-
-    let query = 'SELECT * FROM user_settings';
-    const params: any[] = [];
-
-    if (category) {
-      query += ' WHERE category = ?';
-      params.push(category);
-    }
-
-    query += ' ORDER BY category, key';
-
-    const stmt = this.db.prepare(query);
-    const rows = stmt.all(...params) as any[];
-
-    return rows.map(row => ({
-      id: row.id,
-      key: row.key,
-      value: row.value,
-      type: row.type,
-      category: row.category,
-      description: row.description,
-      created_at: row.created_at,
-      updated_at: row.updated_at
-    }));
+    return this.settingsService.getUserSettings(category);
   }
 
   public getUserSettingByKey(key: string): UserSetting | null {
-    if (!this.db) throw new Error('Database not initialized');
-
-    const stmt = this.db.prepare('SELECT * FROM user_settings WHERE key = ?');
-    const row = stmt.get(key) as any;
-
-    if (!row) return null;
-
-    return {
-      id: row.id,
-      key: row.key,
-      value: row.value,
-      type: row.type,
-      category: row.category,
-      description: row.description,
-      created_at: row.created_at,
-      updated_at: row.updated_at
-    };
+    return this.settingsService.getUserSettingByKey(key);
   }
 
   public saveUserSetting(setting: Omit<UserSetting, 'id' | 'created_at' | 'updated_at'>): boolean {
-    if (!this.db) throw new Error('Database not initialized');
-
-    // 验证用户设置数据
-    this.validateUserSetting(setting);
-
-    const now = new Date().toISOString();
-    const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO user_settings (key, value, type, category, description, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, 
-        COALESCE((SELECT created_at FROM user_settings WHERE key = ?), ?), 
-        ?
-      )
-    `);
-
-    const result = stmt.run(
-      setting.key,
-      setting.value,
-      setting.type,
-      setting.category,
-      setting.description || null,
-      setting.key,
-      now,
-      now
-    );
-
-    return result.changes > 0;
+    return this.settingsService.saveUserSetting(setting);
   }
 
   public updateUserSetting(key: string, value: string): boolean {
-    if (!this.db) throw new Error('Database not initialized');
-
-    const stmt = this.db.prepare(`
-      UPDATE user_settings 
-      SET value = ?, updated_at = ? 
-      WHERE key = ?
-    `);
-
-    const result = stmt.run(value, new Date().toISOString(), key);
-    return result.changes > 0;
+    return this.settingsService.updateUserSetting(key, value);
   }
 
   public deleteUserSetting(key: string): boolean {
-    if (!this.db) throw new Error('Database not initialized');
-
-    const stmt = this.db.prepare('DELETE FROM user_settings WHERE key = ?');
-    const result = stmt.run(key);
-
-    return result.changes > 0;
+    return this.settingsService.deleteUserSetting(key);
   }
 
   public getUserSettingsCategories(): UserSettingsCategory[] {
-    if (!this.db) throw new Error('Database not initialized');
-
-    const stmt = this.db.prepare(`
-      SELECT 
-        category,
-        GROUP_CONCAT(key, ',') as settings
-      FROM user_settings 
-      GROUP BY category 
-      ORDER BY category
-    `);
-
-    const rows = stmt.all() as any[];
-
-    return rows.map(row => ({
-      category: row.category,
-      description: this.getCategoryDescription(row.category),
-      settings: row.settings ? row.settings.split(',') : []
-    }));
+    return this.settingsService.getUserSettingsCategories();
   }
 
-  private getCategoryDescription(category: string): string {
-    const descriptions: { [key: string]: string } = {
-      security: '安全相关设置，包括密码生成器、自动锁定等',
-      ui: '界面相关设置，包括主题、语言、显示选项等',
-      general: '通用设置',
-      backup: '备份和恢复相关设置',
-      sync: '同步相关设置'
-    };
-
-    return descriptions[category] || '其他设置';
-  }
+  // 类别描述由 SettingsService 管理
 
   public getTypedUserSetting<T>(key: string, defaultValue: T): T {
-    const setting = this.getUserSettingByKey(key);
-    if (!setting) return defaultValue;
-
-    try {
-      switch (setting.type) {
-        case 'boolean':
-          return (setting.value === 'true') as unknown as T;
-        case 'number':
-          return Number(setting.value) as unknown as T;
-        case 'json':
-          return JSON.parse(setting.value) as T;
-        default:
-          return setting.value as unknown as T;
-      }
-    } catch (error) {
-      console.error(`Failed to parse setting ${key}:`, error);
-      return defaultValue;
-    }
+    return this.settingsService.getTypedUserSetting<T>(key, defaultValue);
   }
 
   // 密码历史记录相关方法
   public getPasswordHistory(passwordId: number): PasswordHistory[] {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    const stmt = this.db.prepare('SELECT * FROM password_history WHERE password_id = ? ORDER BY changed_at DESC');
-    const history = stmt.all(passwordId) as PasswordHistory[];
-    
-    // 解密密码字段
-    return history.map(item => ({
-      ...item,
-      old_password: this.decrypt(item.old_password),
-      new_password: this.decrypt(item.new_password)
-    }));
+    return this.passwordService.getPasswordHistory(passwordId);
   }
 
   private savePasswordHistory(passwordId: number, oldPassword: string, newPassword: string, reason?: string): void {
@@ -1043,42 +680,12 @@ export class DatabaseService {
 
   // 获取需要更新密码的列表（6个月未更新）
   public getPasswordsNeedingUpdate(): PasswordItem[] {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-    
-    const stmt = this.db.prepare('SELECT * FROM passwords WHERE updated_at < ? ORDER BY updated_at ASC');
-    const passwords = stmt.all(sixMonthsAgo.toISOString()) as PasswordItem[];
-    
-    return passwords.map(password => ({
-      ...password,
-      password: password.password ? this.decrypt(password.password) : '',
-      multi_accounts: password.multi_accounts ? this.decrypt(password.multi_accounts) : undefined
-    }));
+    return this.passwordService.getPasswordsNeedingUpdate();
   }
 
   // 搜索密码（使用FTS5全文搜索）
   public searchPasswords(keyword: string): PasswordItem[] {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    // 使用FTS5全文搜索，支持布尔查询和排序
-    const stmt = this.db.prepare(`
-      SELECT p.* FROM passwords p
-      JOIN passwords_fts fts ON p.id = fts.rowid
-      WHERE passwords_fts MATCH ?
-      ORDER BY p.updated_at DESC
-    `);
-    
-    // 构建FTS5查询，支持自然语言搜索
-    const ftsQuery = keyword.includes(' ') ? `"${keyword}"` : keyword;
-    const passwords = stmt.all(ftsQuery) as PasswordItem[];
-    
-    return passwords.map(password => ({
-      ...password,
-      password: password.password ? this.decrypt(password.password) : '',
-      multi_accounts: password.multi_accounts ? this.decrypt(password.multi_accounts) : undefined
-    }));
+    return this.passwordService.searchPasswords(keyword);
   }
 
   // 高级搜索（支持多字段和布尔查询）
@@ -1092,146 +699,32 @@ export class DatabaseService {
     dateFrom?: string;
     dateTo?: string;
   }): PasswordItem[] {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    let query = 'SELECT * FROM passwords WHERE 1=1';
-    const params: any[] = [];
-    
-    // 如果有关键词，使用FTS搜索
-    if (options.keyword && options.keyword.trim()) {
-      query += ` AND id IN (
-        SELECT rowid FROM passwords_fts WHERE passwords_fts MATCH ?
-      )`;
-      const ftsQuery = options.keyword.includes(' ') ? `"${options.keyword}"` : options.keyword;
-      params.push(ftsQuery);
-    }
-    
-    // 精确字段搜索
-    if (options.title) {
-      query += ' AND title LIKE ?';
-      params.push(`%${options.title}%`);
-    }
-    
-    if (options.username) {
-      query += ' AND username LIKE ?';
-      params.push(`%${options.username}%`);
-    }
-    
-    if (options.url) {
-      query += ' AND url LIKE ?';
-      params.push(`%${options.url}%`);
-    }
-    
-    if (options.notes) {
-      query += ' AND notes LIKE ?';
-      params.push(`%${options.notes}%`);
-    }
-    
-    if (options.groupId) {
-      query += ' AND group_id = ?';
-      params.push(options.groupId);
-    }
-    
-    if (options.dateFrom) {
-      query += ' AND updated_at >= ?';
-      params.push(options.dateFrom);
-    }
-    
-    if (options.dateTo) {
-      query += ' AND updated_at <= ?';
-      params.push(options.dateTo);
-    }
-    
-    query += ' ORDER BY updated_at DESC';
-    
-    const stmt = this.db.prepare(query);
-    const passwords = stmt.all(...params) as PasswordItem[];
-    
-    return passwords.map(password => ({
-      ...password,
-      password: password.password ? this.decrypt(password.password) : '',
-      multi_accounts: password.multi_accounts ? this.decrypt(password.multi_accounts) : undefined
-    }));
+    return this.passwordService.advancedSearch(options);
   }
 
   // 根据ID获取单个密码
   public getPasswordById(id: number): PasswordItem | null {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    const stmt = this.db.prepare('SELECT * FROM passwords WHERE id = ?');
-    const password = stmt.get(id) as PasswordItem;
-    
-    if (!password) return null;
-    
-    return {
-      ...password,
-      password: password.password ? this.decrypt(password.password) : '',
-      multi_accounts: password.multi_accounts ? this.decrypt(password.multi_accounts) : undefined
-    };
+    return this.passwordService.getPasswordById(id);
   }
 
   // 获取密码的多账号信息
   public getPasswordMultiAccounts(id: number): string | null {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    const stmt = this.db.prepare('SELECT multi_accounts FROM passwords WHERE id = ?');
-    const result = stmt.get(id) as { multi_accounts: string } | undefined;
-    
-    if (!result || !result.multi_accounts) return null;
-    
-    return this.decrypt(result.multi_accounts);
+    return this.passwordService.getPasswordMultiAccounts(id);
   }
 
   // 设置密码的多账号信息
   public setPasswordMultiAccounts(id: number, accounts: string): void {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    const encryptedAccounts = this.encrypt(accounts);
-    const now = new Date().toISOString();
-    
-    const stmt = this.db.prepare(`
-      UPDATE passwords 
-      SET multi_accounts = ?, updated_at = ? 
-      WHERE id = ?
-    `);
-    
-    stmt.run(encryptedAccounts, now, id);
+    this.passwordService.setPasswordMultiAccounts(id, accounts);
   }
 
   // 更新密码（记录历史）
   public updatePassword(id: number, newPassword: string, reason?: string): void {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    // 获取旧密码
-    const oldPasswordStmt = this.db.prepare('SELECT password FROM passwords WHERE id = ?');
-    const oldPasswordResult = oldPasswordStmt.get(id) as { password: string } | undefined;
-    
-    if (!oldPasswordResult) {
-      throw new Error('Password not found');
-    }
-    
-    const encryptedNewPassword = this.encrypt(newPassword);
-    const now = new Date().toISOString();
-    
-    // 更新密码
-    const updateStmt = this.db.prepare(`
-      UPDATE passwords 
-      SET password = ?, updated_at = ? 
-      WHERE id = ?
-    `);
-    
-    updateStmt.run(encryptedNewPassword, now, id);
-    
-    // 记录历史
-    this.savePasswordHistory(id, oldPasswordResult.password, encryptedNewPassword, reason);
+    this.passwordService.updatePassword(id, newPassword, reason);
   }
 
   // 根据ID获取分组
   public getGroupById(id: number): Group | undefined {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    const stmt = this.db.prepare('SELECT * FROM groups WHERE id = ?');
-    return stmt.get(id) as Group | undefined;
+    return this.groupService.getGroupById(id);
   }
 
   // 重置设置为默认值
@@ -1449,7 +942,7 @@ export class DatabaseService {
         if (importData.groups && importData.groups.length > 0) {
           for (const group of importData.groups) {
             try {
-              this.validateGroup(group);
+              this.groupService.validateGroup(group);
               if (options.mergeStrategy === 'skip' && this.getGroupByName(group.name, group.parent_id)) {
                 result.skipped++;
                 continue;
@@ -1466,7 +959,7 @@ export class DatabaseService {
         if (importData.passwords && importData.passwords.length > 0) {
           for (const password of importData.passwords) {
             try {
-              this.validatePassword(password);
+              this.passwordService.validatePassword(password);
               
               // 检查是否已存在
               const existing = this.getPasswords().find(p => p.title === password.title);
@@ -1496,7 +989,7 @@ export class DatabaseService {
         if (importData.user_settings && importData.user_settings.length > 0) {
           for (const setting of importData.user_settings) {
             try {
-              this.validateUserSetting(setting);
+              this.settingsService.validateUserSetting(setting);
               this.saveUserSetting(setting);
               result.imported++;
             } catch (error) {
@@ -1652,114 +1145,32 @@ export class DatabaseService {
 
   // 导入设置
   public importSettings(settings: UserSetting[]): number {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    let importCount = 0;
-    const now = new Date().toISOString();
-    
-    const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO user_settings (key, value, type, category, description, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-    
-    for (const setting of settings) {
-      try {
-        stmt.run(
-          setting.key,
-          setting.value,
-          setting.type || 'string',
-          setting.category || 'general',
-          setting.description || null,
-          setting.created_at || now,
-          now
-        );
-        importCount++;
-      } catch (error) {
-        console.error(`Failed to import setting ${setting.key}:`, error);
-      }
-    }
-    
-    return importCount;
+    return this.settingsService.importSettings(settings);
   }
 
   // 导出设置
   public exportSettings(categories?: string[]): UserSetting[] {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    let query = 'SELECT * FROM user_settings';
-    const params: any[] = [];
-    
-    if (categories && categories.length > 0) {
-      const placeholders = categories.map(() => '?').join(',');
-      query += ` WHERE category IN (${placeholders})`;
-      params.push(...categories);
-    }
-    
-    query += ' ORDER BY category, key';
-    
-    const stmt = this.db.prepare(query);
-    return stmt.all(...params) as UserSetting[];
+    return this.settingsService.exportSettings(categories);
   }
 
   // 添加历史记录
   public addPasswordHistory(history: PasswordHistory): number {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    const encryptedOldPassword = this.encrypt(history.old_password);
-    const encryptedNewPassword = this.encrypt(history.new_password);
-    
-    const stmt = this.db.prepare(`
-      INSERT INTO password_history (password_id, old_password, new_password, changed_at, changed_reason) 
-      VALUES (?, ?, ?, ?, ?)
-    `);
-    
-    const result = stmt.run(
-      history.password_id,
-      encryptedOldPassword,
-      encryptedNewPassword,
-      history.changed_at || new Date().toISOString(),
-      history.changed_reason || null
-    );
-    
-    return result.lastInsertRowid as number;
+    return this.passwordService.addPasswordHistory(history);
   }
 
   // 根据ID获取历史记录
   public getHistoryById(id: number): PasswordHistory | undefined {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    const stmt = this.db.prepare('SELECT * FROM password_history WHERE id = ?');
-    const history = stmt.get(id) as PasswordHistory;
-    
-    if (!history) return undefined;
-    
-    // 解密密码字段
-    return {
-      ...history,
-      old_password: this.decrypt(history.old_password),
-      new_password: this.decrypt(history.new_password)
-    };
+    return this.passwordService.getHistoryById(id);
   }
 
   // 删除历史记录
   public deleteHistory(id: number): void {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    const stmt = this.db.prepare('DELETE FROM password_history WHERE id = ?');
-    stmt.run(id);
+    return this.passwordService.deleteHistory(id);
   }
 
   // 清理旧历史记录
   public cleanOldHistory(daysToKeep: number = 365): number {
-    if (!this.db) throw new Error('Database not initialized');
-    
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
-    
-    const stmt = this.db.prepare('DELETE FROM password_history WHERE changed_at < ?');
-    const result = stmt.run(cutoffDate.toISOString());
-    
-    return result.changes;
+    return this.passwordService.cleanOldHistory(daysToKeep);
   }
 
   // 数据完整性检查方法
