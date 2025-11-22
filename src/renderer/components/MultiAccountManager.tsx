@@ -7,17 +7,12 @@ import {
   Space, 
   message, 
   Form,
-  Tooltip,
-  Popconfirm
+  Tooltip
 } from 'antd';
 import { 
-  EditOutlined, 
   CopyOutlined, 
   EyeOutlined, 
-  EyeInvisibleOutlined,
-  SaveOutlined,
-  CloseOutlined,
-  DeleteOutlined
+  EyeInvisibleOutlined
 } from '@ant-design/icons';
 
 const { Title, Text, Paragraph } = Typography;
@@ -38,13 +33,9 @@ const MultiAccountManager: React.FC<MultiAccountManagerProps> = ({
 }) => {
   const [multiAccounts, setMultiAccounts] = useState<string>(initialData);
   const [isVisible, setIsVisible] = useState<boolean>(false);
-  const [isEditing, setIsEditing] = useState<boolean>(false);
-  const [editValue, setEditValue] = useState<string>(initialData);
-  const [loading, setLoading] = useState<boolean>(false);
 
   useEffect(() => {
     setMultiAccounts(initialData);
-    setEditValue(initialData);
   }, [initialData]);
 
   const handleCopyAll = async () => {
@@ -56,69 +47,16 @@ const MultiAccountManager: React.FC<MultiAccountManagerProps> = ({
     }
   };
 
-  const handleEdit = () => {
-    setEditValue(multiAccounts);
-    setIsEditing(true);
-  };
-
-  const handleSave = async () => {
-    if (!editValue.trim()) {
-      message.warning('多账号信息不能为空');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      // 这里应该调用API保存到数据库
-      // await window.electronAPI.updatePassword(passwordId, { multi_accounts: editValue });
-      
-      setMultiAccounts(editValue);
-      setIsEditing(false);
-      setIsVisible(false);
-      message.success('保存成功');
-      
-      if (onSave) {
-        onSave(editValue);
-      }
-    } catch (error) {
-      message.error('保存失败');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCancel = () => {
-    setEditValue(multiAccounts);
-    setIsEditing(false);
-  };
-
-  const handleDelete = async () => {
-    setLoading(true);
-    try {
-      // await window.electronAPI.updatePassword(passwordId, { multi_accounts: '' });
-      setMultiAccounts('');
-      setEditValue('');
-      setIsEditing(false);
-      setIsVisible(false);
-      message.success('删除成功');
-      
-      if (onSave) {
-        onSave('');
-      }
-    } catch (error) {
-      message.error('删除失败');
-    } finally {
-      setLoading(false);
-    }
+  const handleChange = (val: string) => {
+    setMultiAccounts(val);
+    if (onSave) onSave(val);
   };
 
   const toggleVisibility = () => {
-    if (!isEditing) {
-      setIsVisible(!isVisible);
-    }
+    setIsVisible(!isVisible);
   };
 
-  if (!multiAccounts && !isEditing) {
+  if (!multiAccounts && readonly) {
     return (
       <Card 
         title={
@@ -127,18 +65,6 @@ const MultiAccountManager: React.FC<MultiAccountManagerProps> = ({
           </Space>
         }
         size="small"
-        extra={
-          !readonly && (
-            <Button 
-              type="primary" 
-              icon={<EditOutlined />} 
-              onClick={handleEdit}
-              size="small"
-            >
-              添加多账号信息
-            </Button>
-          )
-        }
       >
         <Text type="secondary">暂无多账号信息</Text>
       </Card>
@@ -147,105 +73,15 @@ const MultiAccountManager: React.FC<MultiAccountManagerProps> = ({
 
   return (
     <Card 
-      title={
-        <Space>
-          <Title level={5} style={{ margin: 0 }}>多账号密码管理</Title>
-          {multiAccounts && (
-            <Tooltip title={isVisible ? '隐藏内容' : '显示内容'}>
-              <Button 
-                type="text" 
-                icon={isVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
-                onClick={toggleVisibility}
-                size="small"
-              />
-            </Tooltip>
-          )}
-        </Space>
-      }
+      title={<Space><Title level={5} style={{ margin: 0 }}>多账号密码管理</Title></Space>}
       size="small"
-      extra={
-        !readonly && (
-          <Space>
-            {multiAccounts && !isEditing && (
-              <>
-                <Tooltip title="复制全部">
-                  <Button 
-                    type="text" 
-                    icon={<CopyOutlined />} 
-                    onClick={handleCopyAll}
-                    size="small"
-                  />
-                </Tooltip>
-                <Button 
-                  type="text" 
-                  icon={<EditOutlined />} 
-                  onClick={handleEdit}
-                  size="small"
-                />
-                <Popconfirm
-                  title="确定要删除多账号信息吗？"
-                  onConfirm={handleDelete}
-                  okText="确定"
-                  cancelText="取消"
-                >
-                  <Button 
-                    type="text" 
-                    danger 
-                    icon={<DeleteOutlined />} 
-                    size="small"
-                  />
-                </Popconfirm>
-              </>
-            )}
-            {isEditing && (
-              <>
-                <Button 
-                  type="primary" 
-                  icon={<SaveOutlined />} 
-                  onClick={handleSave}
-                  loading={loading}
-                  size="small"
-                >
-                  保存
-                </Button>
-                <Button 
-                  icon={<CloseOutlined />} 
-                  onClick={handleCancel}
-                  size="small"
-                >
-                  取消
-                </Button>
-              </>
-            )}
-          </Space>
-        )
-      }
+      extra={multiAccounts && !readonly ? (
+        <Tooltip title="复制全部">
+          <Button type="text" icon={<CopyOutlined />} onClick={handleCopyAll} size="small" />
+        </Tooltip>
+      ) : undefined}
     >
-      {isEditing ? (
-        <Form layout="vertical">
-          <Form.Item label="多账号信息（自由文本格式）">
-            <TextArea
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              placeholder={`请输入多账号信息，例如：
-
-安装器URL: http://installer.example.com
-MySQL服务器: 192.168.1.100:3306
-MySQL用户名: admin
-MySQL密码: mysql123
-Redis服务器: 192.168.1.101:6379
-Redis密码: redis123`}
-              rows={8}
-              style={{ fontFamily: 'monospace' }}
-            />
-          </Form.Item>
-          <Form.Item>
-            <Text type="secondary">
-              提示：支持自由文本格式，可以包含服务器地址、用户名、密码等信息
-            </Text>
-          </Form.Item>
-        </Form>
-      ) : (
+      {readonly ? (
         <div>
           {isVisible ? (
             <div>
@@ -268,7 +104,33 @@ Redis密码: redis123`}
           ) : (
             <Text type="secondary">内容已隐藏</Text>
           )}
+          {multiAccounts && (
+            <Tooltip title={isVisible ? '隐藏内容' : '显示内容'}>
+              <Button type="text" icon={isVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />} onClick={toggleVisibility} size="small" />
+            </Tooltip>
+          )}
         </div>
+      ) : (
+        <Form layout="vertical">
+          <Form.Item label="多账号信息（自由文本格式）">
+            <TextArea
+              value={multiAccounts}
+              onChange={(e) => handleChange(e.target.value)}
+              placeholder={`请输入多账号信息，例如：
+\n安装器URL: http://installer.example.com
+MySQL服务器: 192.168.1.100:3306
+MySQL用户名: admin
+MySQL密码: mysql123
+Redis服务器: 192.168.1.101:6379
+Redis密码: redis123`}
+              rows={8}
+              style={{ fontFamily: 'monospace' }}
+            />
+          </Form.Item>
+          <Form.Item>
+            <Text type="secondary">提示：支持自由文本格式，可以包含服务器地址、用户名、密码等信息</Text>
+          </Form.Item>
+        </Form>
       )}
     </Card>
   );

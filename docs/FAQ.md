@@ -34,3 +34,13 @@
 ```
 sqlite3 passwords.db "select * from passwords"
 ```
+
+# 5.代码执行链路
+- 渲染层调用点： src/renderer/App.tsx:216-217 使用 window.electronAPI.addPassword(values)
+- 预加载映射： src/main/preload.ts:151-153
+    - addPassword: (password) => ipcRenderer.invoke('add-password', password)
+- 主进程 IPC 处理： src/main/main.ts:104-108
+    - ipcMain.handle('add-password', async (_, password) => { const id = this.databaseService!.savePassword(password); return { success: true, id }; })
+- 数据层委派： src/main/database/DatabaseService.ts:648
+    - public savePassword(password: PasswordItem): number { return this.passwordService.savePassword(password); }
+- 真实保存逻辑： src/main/services/PasswordService.ts:65-116

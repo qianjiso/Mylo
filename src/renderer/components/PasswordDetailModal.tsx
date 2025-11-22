@@ -62,10 +62,10 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
         notes: password.notes || '',
         group_id: password.group_id || null
       });
-      setMultiAccounts(password.multiAccounts || '');
+      setMultiAccounts(password.multi_accounts ?? password.multiAccounts ?? '');
       setShowPassword(false);
       // 根据数据判断密码类型
-      if (password.multiAccounts && password.multiAccounts.trim()) {
+      if ((password.multi_accounts ?? password.multiAccounts ?? '').trim()) {
         setPasswordType('multi');
       } else {
         setPasswordType('single');
@@ -93,11 +93,11 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
       };
 
       if (passwordType === 'single') {
-        passwordData.password = values.password;
-        passwordData.multiAccounts = undefined;
+        (passwordData as any).password = values.password;
+        (passwordData as any).multi_accounts = undefined;
       } else {
-        passwordData.password = undefined;
-        passwordData.multiAccounts = multiAccounts || undefined;
+        (passwordData as any).password = undefined;
+        (passwordData as any).multi_accounts = multiAccounts || undefined;
       }
 
       if (mode === 'create') {
