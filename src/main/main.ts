@@ -163,6 +163,73 @@ class PasswordManagerApp {
       return { success };
     });
 
+    ipcMain.handle('get-note-groups', async () => {
+      return this.databaseService!.getNoteGroups();
+    });
+
+    ipcMain.handle('get-note-group-tree', async (_, parentId?: number) => {
+      return this.databaseService!.getNoteGroupTree(parentId);
+    });
+
+    ipcMain.handle('add-note-group', async (_, group) => {
+      try {
+        const id = this.databaseService!.saveNoteGroup(group);
+        return { success: true, id };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('update-note-group', async (_, id, group) => {
+      try {
+        const updated = { ...group, id };
+        this.databaseService!.saveNoteGroup(updated);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('delete-note-group', async (_, id) => {
+      const success = this.databaseService!.deleteNoteGroup(id);
+      return { success };
+    });
+
+    ipcMain.handle('get-notes', async (_, groupId?: number) => {
+      return this.databaseService!.getNotes(groupId);
+    });
+
+    ipcMain.handle('get-note', async (_, id: number) => {
+      return this.databaseService!.getNoteById(id);
+    });
+
+    ipcMain.handle('add-note', async (_, note) => {
+      try {
+        const id = this.databaseService!.saveNote(note);
+        return { success: true, id };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('update-note', async (_, id, note) => {
+      try {
+        const updated = { ...note, id };
+        this.databaseService!.saveNote(updated);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: (error as Error).message };
+      }
+    });
+
+    ipcMain.handle('delete-note', async (_, id) => {
+      const success = this.databaseService!.deleteNote(id);
+      return { success };
+    });
+
+    ipcMain.handle('search-notes-title', async (_, keyword: string) => {
+      return this.databaseService!.searchNotesByTitle(keyword);
+    });
     
 
     // 生成密码

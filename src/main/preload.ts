@@ -141,6 +141,18 @@ export interface ElectronAPI {
     validateIntegrity: boolean;
     dryRun: boolean;
   }) => Promise<{ success: boolean; data?: any; error?: string }>;
+
+  getNoteGroups(): Promise<any[]>;
+  getNoteGroupTree(parentId?: number): Promise<any[]>;
+  addNoteGroup(group: any): Promise<{ success: boolean; id: number; error?: string }>;
+  updateNoteGroup(id: number, group: any): Promise<{ success: boolean; error?: string }>;
+  deleteNoteGroup(id: number): Promise<{ success: boolean; error?: string }>;
+  getNotes(groupId?: number): Promise<any[]>;
+  getNote(id: number): Promise<any>;
+  addNote(note: any): Promise<{ success: boolean; id: number; error?: string }>;
+  updateNote(id: number, note: any): Promise<{ success: boolean; error?: string }>;
+  deleteNote(id: number): Promise<{ success: boolean; error?: string }>;
+  searchNotesTitle(keyword: string): Promise<any[]>;
 }
 
 // 将API暴露给渲染进程
@@ -204,6 +216,18 @@ const electronAPI: ElectronAPI = {
   // 文件操作
   exportData: (options) => ipcRenderer.invoke('export-data', options),
   importData: (data, options) => ipcRenderer.invoke('import-data', data, options)
+  ,
+  getNoteGroups: () => ipcRenderer.invoke('get-note-groups'),
+  getNoteGroupTree: (parentId) => ipcRenderer.invoke('get-note-group-tree', parentId),
+  addNoteGroup: (group) => ipcRenderer.invoke('add-note-group', group),
+  updateNoteGroup: (id, group) => ipcRenderer.invoke('update-note-group', id, group),
+  deleteNoteGroup: (id) => ipcRenderer.invoke('delete-note-group', id),
+  getNotes: (groupId) => ipcRenderer.invoke('get-notes', groupId),
+  getNote: (id) => ipcRenderer.invoke('get-note', id),
+  addNote: (note) => ipcRenderer.invoke('add-note', note),
+  updateNote: (id, note) => ipcRenderer.invoke('update-note', id, note),
+  deleteNote: (id) => ipcRenderer.invoke('delete-note', id),
+  searchNotesTitle: (keyword) => ipcRenderer.invoke('search-notes-title', keyword)
 };
 
 // 使用 contextBridge 安全地暴露API

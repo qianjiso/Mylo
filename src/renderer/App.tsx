@@ -8,6 +8,7 @@ import PasswordGenerator from './components/PasswordGenerator';
 import PasswordDetailModal from './components/PasswordDetailModal';
 import UserSettings from './components/UserSettings';
 import ImportExportModal from './components/ImportExportModal';
+import NoteManager from './components/NoteManager';
 import './styles/global.css';
 
 // 从preload导入类型
@@ -66,6 +67,7 @@ const App: React.FC = () => {
   const [historyModalVisible, setHistoryModalVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [importExportVisible, setImportExportVisible] = useState(false);
+  const [noteVisible, setNoteVisible] = useState(false);
   const [editingPassword, setEditingPassword] = useState<Password | null>(null);
   const [editingGroup, setEditingGroup] = useState<Group | null>(null);
   const [generatorVisible, setGeneratorVisible] = useState(false);
@@ -532,6 +534,7 @@ const App: React.FC = () => {
           >
             导入导出
           </Button>
+          <Button onClick={() => setNoteVisible(true)}>便笺</Button>
           <Button
             icon={<SettingOutlined />}
             onClick={() => setSettingsVisible(true)}
@@ -759,6 +762,10 @@ const App: React.FC = () => {
         visible={importExportVisible}
         onClose={() => setImportExportVisible(false)}
       />
+
+      <Modal title="便笺" open={noteVisible} onCancel={() => setNoteVisible(false)} footer={null} width={900}>
+        <NoteManager onClose={() => setNoteVisible(false)} />
+      </Modal>
     </Layout>
   );
 };

@@ -43,4 +43,23 @@ sqlite3 passwords.db "select * from passwords"
     - ipcMain.handle('add-password', async (_, password) => { const id = this.databaseService!.savePassword(password); return { success: true, id }; })
 - 数据层委派： src/main/database/DatabaseService.ts:648
     - public savePassword(password: PasswordItem): number { return this.passwordService.savePassword(password); }
-- 真实保存逻辑： src/main/services/PasswordService.ts:65-116
+ - 真实保存逻辑： src/main/services/PasswordService.ts:65-116
+
+# 6. 关于“便笺”（原“加密笔记”）
+## 为什么移除多账号密码？
+- 单条目包含多个账号会导致自动填充、健康评分、泄露检测、权限审计变得复杂且不一致。
+- 统一“一账号=一条目”更清晰，便于后续功能扩展与维护。
+
+## “便笺”是什么？
+- 独立的自由文本记录模块，支持分组、置顶、归档；内容端侧加密，服务端不可读。
+- 与密码模块彻底解耦；适合记录账号列表、操作说明、临时信息等。
+
+## 命名为什么叫“安全记录”？
+- 简洁直观，强调安全属性与记录功能，比“加密笔记”更口语化、易理解。
+
+## 如何迁移历史“多账号”内容？
+- 旧版本中的多账号文本可一键转换为“便笺”；如需拆分为多个单账号密码，可由迁移向导尝试解析，失败项保留至“便笺”。
+
+## 搜索如何工作？
+- 密码：基于数据库 FTS5（title/username/url/notes）。
+- 便笺：客户端解密后本地搜索，保护隐私。

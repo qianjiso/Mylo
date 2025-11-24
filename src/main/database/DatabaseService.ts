@@ -3,6 +3,7 @@ import * as path from 'path';
 import GroupService, { Group, GroupWithChildren } from '../services/GroupService';
 import PasswordService, { PasswordItem, PasswordHistory } from '../services/PasswordService';
 import SettingsService, { UserSetting, UserSettingsCategory } from '../services/SettingsService';
+import NoteService, { SecureRecord, SecureRecordGroup } from '../services/NoteService';
 import { createCrypto } from '../../shared/security/crypto';
 
 // 类型定义由模块服务导出，保持单一来源
@@ -13,6 +14,7 @@ export class DatabaseService {
   private groupService!: GroupService;
   private passwordService!: PasswordService;
   private settingsService!: SettingsService;
+  private noteService!: NoteService;
   private cryptoAdapter!: { encrypt: (text: string) => string; decrypt: (text: string) => string };
 
   constructor() {
@@ -39,6 +41,7 @@ export class DatabaseService {
       this.groupService = new GroupService(this.db);
       this.passwordService = new PasswordService(this.db, this.cryptoAdapter);
       this.settingsService = new SettingsService(this.db);
+      this.noteService = new NoteService(this.db, this.cryptoAdapter);
     } catch (error) {
       console.error('Database initialization error:', error);
       throw error;
@@ -163,6 +166,32 @@ export class DatabaseService {
 
     // 初始化默认设置
     this.initializeDefaultSettings();
+
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS secure_record_groups (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        parent_id INTEGER,
+        color TEXT DEFAULT 'blue',
+        sort_order INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS secure_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT,
+        content_ciphertext TEXT NOT NULL,
+        group_id INTEGER,
+        pinned INTEGER DEFAULT 0,
+        archived INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_secure_record_groups_parent ON secure_record_groups(parent_id);
+      CREATE INDEX IF NOT EXISTS idx_secure_record_groups_sort ON secure_record_groups(parent_id, sort_order);
+      CREATE INDEX IF NOT EXISTS idx_secure_records_group ON secure_records(group_id);
+      CREATE INDEX IF NOT EXISTS idx_secure_records_updated ON secure_records(updated_at DESC);
+    `);
   }
 
   private encrypt(text: string): string {
@@ -1171,6 +1200,42 @@ export class DatabaseService {
   // 清理旧历史记录
   public cleanOldHistory(daysToKeep: number = 365): number {
     return this.passwordService.cleanOldHistory(daysToKeep);
+  }
+
+  public getNoteGroups(): SecureRecordGroup[] {
+    return this.noteService.getNoteGroups();
+  }
+
+  public getNoteGroupTree(parentId?: number) {
+    return this.noteService.getNoteGroupTree(parentId);
+  }
+
+  public saveNoteGroup(group: SecureRecordGroup): number {
+    return this.noteService.saveNoteGroup(group);
+  }
+
+  public deleteNoteGroup(id: number): boolean {
+    return this.noteService.deleteNoteGroup(id);
+  }
+
+  public getNotes(groupId?: number): SecureRecord[] {
+    return this.noteService.getNotes(groupId);
+  }
+
+  public getNoteById(id: number): SecureRecord | null {
+    return this.noteService.getNoteById(id);
+  }
+
+  public saveNote(note: SecureRecord): number {
+    return this.noteService.saveNote(note);
+  }
+
+  public deleteNote(id: number): boolean {
+    return this.noteService.deleteNote(id);
+  }
+
+  public searchNotesByTitle(keyword: string): SecureRecord[] {
+    return this.noteService.searchNotesByTitle(keyword);
   }
 
   // 数据完整性检查方法
