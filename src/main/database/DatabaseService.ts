@@ -529,16 +529,7 @@ export class DatabaseService {
     if (multiRaw && String(multiRaw).length > 50000) {
       throw new Error('多账号信息长度不能超过50000个字符');
     }
-    if (password.url && password.url.trim() !== '') {
-      try {
-        new URL(password.url);
-      } catch {
-        const urlPattern = /^https?:\/\/.+|^[\w.-]+\.[a-zA-Z]{2,}$/;
-        if (!urlPattern.test(password.url)) {
-          throw new Error('URL格式不正确');
-        }
-      }
-    }
+    // 取消URL内容格式校验，允许任意字符串（保留长度限制）
   }
 
   private validateGroup(group: Group): void {

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>便笺管理 - 设计稿</title>
+<style>
+  :root {
+    --primary: #007AFF; --bg: #F2F2F7; --card:#FFFFFF; --text:#000000; --sub:#8E8E93; --border:#C6C6C8;
+    --danger:#FF3B30; --muted:#f7f7f7;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background: var(--bg); color: var(--text); font-family: -apple-system, "SF Pro Text", "PingFang SC", sans-serif; }
+  .app { display:flex; min-width:980px; min-height:640px; }
+  .sidebar { width:300px; background:#fff; border-right:1px solid var(--border); padding:16px; }
+  .sidebar h2 { margin:0 0 8px; font-size:16px; }
+  .tree { display:flex; flex-direction:column; gap:6px; }
+  .node { display:flex; align-items:center; justify-content:space-between; padding:6px 8px; border-radius:8px; }
+  .node:hover { background:var(--muted); }
+  .node-left { display:flex; align-items:center; gap:8px; }
+  .triangle { width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-top:7px solid #8E8E93; transform: rotate(90deg); }
+  .dot { width:12px; height:12px; border-radius:50%; }
+  .count { color:var(--sub); font-size:12px; }
+  .group-tools { margin-top:10px; display:flex; gap:8px; }
+  .btn { padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:#fff; cursor:pointer; }
+  .btn.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+  .panel { margin-top:12px; padding:8px; border:1px dashed var(--border); border-radius:10px; }
+  .panel-title { font-size:13px; color:var(--sub); margin-bottom:8px; }
+  .panel-row { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+  .input { flex:1; padding:8px 10px; border:1px solid var(--border); border-radius:8px; }
+  .color-swatch { display:flex; gap:6px; }
+  .sw { width:18px; height:18px; border-radius:50%; border:1px solid #ddd; cursor:pointer; }
+
+  .main { flex:1; display:flex; flex-direction:column; }
+  .toolbar { display:flex; gap:12px; align-items:center; padding:12px 16px; border-bottom:1px solid var(--border); background:#fff; }
+  .search { flex:1; padding:8px 12px; border:1px solid var(--border); border-radius:8px; outline:none; }
+  .table { padding:16px; }
+  table { width:100%; border-collapse: collapse; background:#fff; border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  th, td { border-bottom:1px solid var(--border); padding:10px 12px; font-size:13px; text-align:left; }
+  thead th { background:#fafafa; }
+  .tag { display:inline-block; padding:4px 8px; border-radius:999px; border:1px solid var(--border); font-size:12px; }
+  .star { color:#FFCC00; }
+  .muted { color:var(--sub); }
+  .pill { padding:6px 10px; border-radius:999px; border:1px solid var(--border); cursor:pointer; background:#fff; }
+  .pill.danger { border-color: var(--danger); color: var(--danger); }
+  .editor { border-top:1px solid var(--border); background:#fff; padding:16px; display:flex; flex-direction:column; gap:10px; }
+  .textarea { width:100%; min-height:140px; resize: vertical; padding:10px; border:1px solid var(--border); border-radius:10px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <h2>便笺分组</h2>
+    <div class="tree">
+      <div class="node">
+        <div class="node-left">
+          <div class="triangle"></div>
+          <div class="dot" style="background:#007AFF;"></div>
+          <div>团队共享</div>
+        </div>
+        <div class="count">8</div>
+      </div>
+      <div class="node" style="margin-left:24px;">
+        <div class="node-left">
+          <div class="dot" style="background:#34C759;"></div>
+          <div>需求讨论</div>
+        </div>
+        <div class="count">3</div>
+      </div>
+      <div class="node">
+        <div class="node-left">
+          <div class="triangle"></div>
+          <div class="dot" style="background:#FF9500;"></div>
+          <div>临时记录</div>
+        </div>
+        <div class="count">5</div>
+      </div>
+      <div class="node">
+        <div class="node-left">
+          <div class="triangle" style="opacity:.3;"></div>
+          <div class="dot" style="background:#8E8E93;"></div>
+          <div>未分组</div>
+        </div>
+        <div class="count">12</div>
+      </div>
+    </div>
+
+    <div class="group-tools">
+      <button class="btn primary">+ 新建分组</button>
+      <button class="btn">重命名</button>
+      <button class="btn">删除</button>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">分组信息</div>
+      <div class="panel-row"><span>名称</span><input class="input" value="团队共享" /></div>
+      <div class="panel-row">
+        <span>颜色</span>
+        <div class="color-swatch">
+          <div class="sw" style="background:#007AFF;"></div>
+          <div class="sw" style="background:#34C759;"></div>
+          <div class="sw" style="background:#FF9500;"></div>
+          <div class="sw" style="background:#FF3B30;"></div>
+          <div class="sw" style="background:#8E8E93;"></div>
+        </div>
+      </div>
+      <div class="panel-row"><span>描述</span><input class="input" placeholder="用于团队共享的临时便笺" /></div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="toolbar">
+      <input class="search" placeholder="🔍 搜索便笺标题..." />
+      <button class="btn primary">+ 新建便笺</button>
+      <button class="btn">筛选 ▾</button>
+      <button class="btn">排序 ▾</button>
+    </div>
+
+    <div class="table">
+      <table>
+        <thead>
+          <tr>
+            <th>标题</th>
+            <th>分组</th>
+            <th>置顶</th>
+            <th>归档</th>
+            <th>更新时间</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>账号列表与说明</td>
+            <td><span class="tag">团队共享</span></td>
+            <td><span class="star">★</span></td>
+            <td><span class="muted">否</span></td>
+            <td>2025-11-10</td>
+            <td>
+              <span class="pill">✏️ 编辑</span>
+              <span class="pill">📋 复制</span>
+              <span class="pill danger">🗑️ 删除</span>
+            </td>
+          </tr>
+          <tr>
+            <td>临时环境说明</td>
+            <td><span class="tag">临时记录</span></td>
+            <td><span class="star" style="opacity:.3;">☆</span></td>
+            <td><span class="muted">否</span></td>
+            <td>2025-11-03</td>
+            <td>
+              <span class="pill">✏️ 编辑</span>
+              <span class="pill">📋 复制</span>
+              <span class="pill danger">🗑️ 删除</span>
+            </td>
+          </tr>
+          <!-- 更多便笺 -->
+        </tbody>
+      </table>
+    </div>
+
+    <div class="editor">
+      <div style="display:flex; gap:10px;">
+        <input class="input" placeholder="标题：" value="临时环境说明" />
+        <select class="input" style="max-width:220px;">
+          <option>未分组</option>
+          <option selected>临时记录</option>
+          <option>团队共享</option>
+        </select>
+        <button class="btn">置顶</button>
+        <button class="btn">归档</button>
+      </div>
+      <textarea class="textarea" placeholder="正文：自由文本，无模板">这里是自由文本内容……</textarea>
+      <div style="display:flex; gap:8px; justify-content:flex-end;">
+        <button class="btn">取消</button>
+        <button class="btn primary">保存</button>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

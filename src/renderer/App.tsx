@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Button, Table, Modal, Form, Input, message, Space, Popconfirm, Tree, Select, Tag, Tooltip } from 'antd';
+import { Layout, Button, Table, Modal, Form, Input, message, Space, Popconfirm, Tree, Select, Tag, Tooltip, Tabs, Dropdown, Menu, Segmented } from 'antd';
 import { formatTimestamp } from './utils/time';
-import { PlusOutlined, EditOutlined, DeleteOutlined, KeyOutlined, SettingOutlined, FolderOutlined, HistoryOutlined, FolderAddOutlined, EyeOutlined, EyeInvisibleOutlined, DownloadOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, DeleteOutlined, SettingOutlined, FolderOutlined, HistoryOutlined, FolderAddOutlined, EyeOutlined, EyeInvisibleOutlined, DownloadOutlined, KeyOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { DataNode } from 'antd/es/tree';
 import PasswordGenerator from './components/PasswordGenerator';
@@ -67,7 +67,24 @@ const App: React.FC = () => {
   const [historyModalVisible, setHistoryModalVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [importExportVisible, setImportExportVisible] = useState(false);
-  const [noteVisible, setNoteVisible] = useState(false);
+  const [currentModule, setCurrentModule] = useState<'password' | 'notes'>('password');
+  const [noteGroups, setNoteGroups] = useState<Array<{ id?: number; name: string; parent_id?: number | null; color?: string }>>([]);
+  const [noteGroupTree, setNoteGroupTree] = useState<any[]>([]);
+  const [selectedNoteGroupId, setSelectedNoteGroupId] = useState<number | undefined>();
+  const [noteGroupModalVisible, setNoteGroupModalVisible] = useState(false);
+  const [editingNoteGroup, setEditingNoteGroup] = useState<any | null>(null);
+  const [noteGroupForm] = Form.useForm();
+  const [noteCreateSignal, setNoteCreateSignal] = useState(0);
+  const [cmdPaletteVisible, setCmdPaletteVisible] = useState(false);
+  const [globalSearchVisible, setGlobalSearchVisible] = useState(false);
+  const [globalSearchPasswords, setGlobalSearchPasswords] = useState<any[]>([]);
+  const [globalSearchNotes, setGlobalSearchNotes] = useState<any[]>([]);
+  const [noteOpenId, setNoteOpenId] = useState<number | undefined>(undefined);
+  const [noteOpenSignal, setNoteOpenSignal] = useState(0);
+  const [globalSearchActiveTab, setGlobalSearchActiveTab] = useState<'pw' | 'nt'>('pw');
+  const [selectedPwIndex, setSelectedPwIndex] = useState(0);
+  const [selectedNoteIndex, setSelectedNoteIndex] = useState(0);
+  
   const [editingPassword, setEditingPassword] = useState<Password | null>(null);
   const [editingGroup, setEditingGroup] = useState<Group | null>(null);
   const [generatorVisible, setGeneratorVisible] = useState(false);
@@ -320,42 +337,33 @@ const App: React.FC = () => {
   };
 
   const renderGroupTitle = (group: Group) => (
-    <div className="group-tree-node">
-      <div className="group-tree-node__info">
-        <span className="group-color-dot" style={{ backgroundColor: getGroupColor(group.color) }} />
-        <span className="group-tree-node__name">{group.name}</span>
-      </div>
-      <div className="group-tree-node__actions">
-        <Button
-          type="text"
-          size="small"
-          icon={<EditOutlined />}
-          onClick={(e) => {
-            e.stopPropagation();
-            handleEditGroup(group);
-          }}
+    <Dropdown
+      trigger={["contextMenu"]}
+      overlay={(
+        <Menu
+          items={[
+            { key: 'rename', label: '重命名', onClick: () => handleEditGroup(group) },
+            { key: 'move', label: '移动到分组', onClick: () => handleEditGroup(group) },
+            { key: 'delete', danger: true, label: '删除', onClick: () => group.id && handleDeleteGroup(group.id) }
+          ]}
         />
-        {group.id && (
-          <Popconfirm
-            title="确定要删除这个分组吗？"
-            onConfirm={(e) => {
-              e?.stopPropagation();
-              handleDeleteGroup(group.id!);
-            }}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button
-              type="text"
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
-              onClick={(e) => e.stopPropagation()}
-            />
-          </Popconfirm>
-        )}
+      )}
+    >
+      <div className="group-tree-node">
+        <div className="group-tree-node__info">
+          <span className="group-color-dot" style={{ backgroundColor: getGroupColor(group.color) }} />
+          <span className="group-tree-node__name">{group.name}</span>
+        </div>
+        <div className="group-tree-node__actions">
+          <Button type="text" size="small" icon={<EditOutlined />} onClick={(e) => { e.stopPropagation(); handleEditGroup(group); }} />
+          {group.id && (
+            <Popconfirm title="确定要删除这个分组吗？" onConfirm={(e) => { e?.stopPropagation(); handleDeleteGroup(group.id!); }} okText="确定" cancelText="取消">
+              <Button type="text" size="small" danger icon={<DeleteOutlined />} onClick={(e) => e.stopPropagation()} />
+            </Popconfirm>
+          )}
+        </div>
       </div>
-    </div>
+    </Dropdown>
   );
 
   const buildGroupNodes = (groups: GroupWithChildren[]): DataNode[] =>
@@ -366,6 +374,51 @@ const App: React.FC = () => {
     }));
 
   const treeData: DataNode[] = buildGroupNodes(groupTree);
+
+  const renderNoteGroupTitle = (group: any) => (
+    <Dropdown
+      trigger={["contextMenu"]}
+      overlay={(
+        <Menu
+          items={[
+            { key: 'rename', label: '重命名', onClick: () => handleEditNoteGroup(group) },
+            { key: 'new-child', label: '新建子分组', onClick: () => { setEditingNoteGroup(null); setNoteGroupModalVisible(true); noteGroupForm.setFieldsValue({ parent_id: group.id }); } },
+            { key: 'move', label: '移动到分组', onClick: () => { handleEditNoteGroup(group); } },
+            { key: 'color-blue', label: '颜色：蓝色', onClick: async () => { await handleSubmitNoteGroup({ name: group.name, color: 'blue', parent_id: group.parent_id }); } },
+            { key: 'color-green', label: '颜色：绿色', onClick: async () => { await handleSubmitNoteGroup({ name: group.name, color: 'green', parent_id: group.parent_id }); } },
+            { key: 'color-orange', label: '颜色：橙色', onClick: async () => { await handleSubmitNoteGroup({ name: group.name, color: 'orange', parent_id: group.parent_id }); } },
+            { key: 'top', label: '排序到顶部', onClick: async () => { await reorderNoteGroupTopBottom(group.id!, true); } },
+            { key: 'bottom', label: '排序到底部', onClick: async () => { await reorderNoteGroupTopBottom(group.id!, false); } },
+            { key: 'delete', danger: true, label: '删除', onClick: () => handleDeleteNoteGroup(group.id!) }
+          ]}
+        />
+      )}
+    >
+      <div className="group-tree-node">
+        <div className="group-tree-node__info">
+          <span className="group-color-dot" style={{ backgroundColor: getGroupColor(group.color) }} />
+          <span className="group-tree-node__name">{group.name}</span>
+        </div>
+        <div className="group-tree-node__actions">
+          <Button type="text" size="small" icon={<EditOutlined />} onClick={(e) => { e.stopPropagation(); handleEditNoteGroup(group); }} />
+          {group.id && (
+            <Popconfirm title="确定要删除这个分组吗？" onConfirm={(e) => { e?.stopPropagation(); handleDeleteNoteGroup(group.id!); }} okText="确定" cancelText="取消">
+              <Button type="text" size="small" danger icon={<DeleteOutlined />} onClick={(e) => e.stopPropagation()} />
+            </Popconfirm>
+          )}
+        </div>
+      </div>
+    </Dropdown>
+  );
+
+  const buildNoteGroupNodes = (groups: any[]): DataNode[] =>
+    groups.map(group => ({
+      key: group.id?.toString() || `note-${group.name}`,
+      title: renderNoteGroupTitle(group),
+      children: group.children && group.children.length > 0 ? buildNoteGroupNodes(group.children) : undefined,
+    }));
+
+  const noteTreeData: DataNode[] = buildNoteGroupNodes(noteGroupTree as any);
 
   const handleGroupSelect = (selectedKeys: React.Key[], info: any) => {
     if (selectedKeys.length > 0) {
@@ -379,6 +432,150 @@ const App: React.FC = () => {
       setSelectedGroupId(undefined);
     }
   };
+
+  const handleNoteGroupSelect = (selectedKeys: React.Key[]) => {
+    if (selectedKeys.length > 0) {
+      const selectedKey = selectedKeys[0] as string;
+      setSelectedNoteGroupId(parseInt(selectedKey));
+    } else {
+      setSelectedNoteGroupId(undefined);
+    }
+  };
+
+  const handleAddNoteGroup = () => {
+    setEditingNoteGroup(null);
+    setNoteGroupModalVisible(true);
+    noteGroupForm.resetFields();
+  };
+
+  const handleEditNoteGroup = (group: any) => {
+    setEditingNoteGroup(group);
+    setNoteGroupModalVisible(true);
+    noteGroupForm.setFieldsValue(group);
+  };
+
+  const handleDeleteNoteGroup = async (id: number) => {
+    try {
+      const result = await window.electronAPI.deleteNoteGroup(id);
+      if (result.success) {
+        message.success('删除便笺分组成功');
+        const tree = await window.electronAPI.getNoteGroupTree();
+        const list = await window.electronAPI.getNoteGroups();
+        setNoteGroupTree(tree || []);
+        setNoteGroups(list || []);
+      } else {
+        message.error(result.error || '删除便笺分组失败');
+      }
+    } catch (error) {
+      message.error('删除便笺分组失败');
+    }
+  };
+
+  const handleSubmitNoteGroup = async (values: any) => {
+    try {
+      const payload = { name: values.name, parent_id: values.parent_id || null, color: values.color || 'blue' };
+      if (editingNoteGroup && editingNoteGroup.id) {
+        const result = await window.electronAPI.updateNoteGroup(editingNoteGroup.id, payload);
+        if (result.success) message.success('更新便笺分组成功'); else message.error(result.error || '更新便笺分组失败');
+      } else {
+        const result = await window.electronAPI.addNoteGroup(payload);
+        if (result.success) message.success('添加便笺分组成功'); else message.error(result.error || '添加便笺分组失败');
+      }
+      setNoteGroupModalVisible(false);
+      const tree = await window.electronAPI.getNoteGroupTree();
+      const list = await window.electronAPI.getNoteGroups();
+      setNoteGroupTree(tree || []);
+      setNoteGroups(list || []);
+    } catch (error: any) {
+      message.error(error.message || (editingNoteGroup ? '更新便笺分组失败' : '添加便笺分组失败'));
+    }
+  };
+
+  const reorderNoteGroupTopBottom = async (groupId: number, toTop: boolean) => {
+    const group = noteGroups.find(g => g.id === groupId);
+    const parentId = group?.parent_id ?? null;
+    const siblings = (noteGroups || [])
+      .filter(g => (g.parent_id ?? null) === parentId)
+      .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    const without = siblings.filter(s => s.id !== groupId);
+    const newOrder = toTop ? [{ id: groupId }, ...without] : [...without, { id: groupId }];
+    for (let i = 0; i < newOrder.length; i++) {
+      const id = newOrder[i].id as number;
+      await window.electronAPI.updateNoteGroup(id, { sort_order: i, parent_id: parentId });
+    }
+    const tree = await window.electronAPI.getNoteGroupTree();
+    const list = await window.electronAPI.getNoteGroups();
+    setNoteGroupTree(tree || []);
+    setNoteGroups(list || []);
+    message.success(toTop ? '已置顶分组' : '已置底分组');
+  };
+
+  useEffect(() => {
+    if (currentModule === 'notes') {
+      (async () => {
+        try {
+          const tree = await window.electronAPI.getNoteGroupTree();
+          const list = await window.electronAPI.getNoteGroups();
+          setNoteGroupTree(tree || []);
+          setNoteGroups(list || []);
+        } catch {
+          message.error('加载便笺分组失败');
+        }
+      })();
+    }
+  }, [currentModule]);
+
+  useEffect(() => {
+    if (!globalSearchVisible) return;
+    const handler = (e: KeyboardEvent) => {
+      const k = e.key;
+      if (k === 'ArrowDown') {
+        if (globalSearchActiveTab === 'pw') setSelectedPwIndex(i => Math.min(i + 1, Math.max(0, globalSearchPasswords.length - 1)));
+        else setSelectedNoteIndex(i => Math.min(i + 1, Math.max(0, globalSearchNotes.length - 1)));
+        e.preventDefault();
+      } else if (k === 'ArrowUp') {
+        if (globalSearchActiveTab === 'pw') setSelectedPwIndex(i => Math.max(i - 1, 0));
+        else setSelectedNoteIndex(i => Math.max(i - 1, 0));
+        e.preventDefault();
+      } else if (k === 'Enter') {
+        if (globalSearchActiveTab === 'pw' && globalSearchPasswords.length) {
+          const row = globalSearchPasswords[selectedPwIndex];
+          setCurrentModule('password');
+          setEditingPassword(row);
+          setPasswordDetailMode('view');
+          setModalVisible(true);
+          setGlobalSearchVisible(false);
+        } else if (globalSearchActiveTab === 'nt' && globalSearchNotes.length) {
+          const row = globalSearchNotes[selectedNoteIndex];
+          setCurrentModule('notes');
+          setGlobalSearchVisible(false);
+          setNoteOpenId(row.id);
+          setNoteOpenSignal(s => s + 1);
+        }
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [globalSearchVisible, globalSearchActiveTab, globalSearchPasswords, globalSearchNotes, selectedPwIndex, selectedNoteIndex]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const meta = e.metaKey || e.ctrlKey;
+      const k = e.key.toLowerCase();
+      if (meta && k === '1') { setCurrentModule('password'); e.preventDefault(); }
+      if (meta && k === '2') { setCurrentModule('notes'); e.preventDefault(); }
+      if (meta && k === 'f') { const el = document.querySelector('input[placeholder*="搜索"]') as HTMLInputElement; if (el) { el.focus(); el.select(); } e.preventDefault(); }
+      if (meta && k === 'n') {
+        if (currentModule === 'password') { handleAdd(); } else { setNoteCreateSignal((s) => s + 1); }
+        e.preventDefault();
+      }
+      if (meta && k === 'k') { setCmdPaletteVisible(true); e.preventDefault(); }
+      if (e.key === 'Escape') { setCmdPaletteVisible(false); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [currentModule]);
 
   const columns: ColumnsType<Password> = [
     {
@@ -397,6 +594,7 @@ const App: React.FC = () => {
       dataIndex: 'password',
       key: 'password',
       render: (text: string, record: Password) => {
+        if (!text) return '-';
         const isVisible = visiblePasswords.has(record.id.toString());
         return (
           <Space>
@@ -470,6 +668,7 @@ const App: React.FC = () => {
       dataIndex: 'old_password',
       key: 'old_password',
       render: (text: string, record: PasswordHistory) => {
+        if (!text) return '-';
         const isVisible = visibleHistoryPasswords.has(`old-${record.id}`);
         return (
           <Space>
@@ -491,6 +690,7 @@ const App: React.FC = () => {
       dataIndex: 'new_password',
       key: 'new_password',
       render: (text: string, record: PasswordHistory) => {
+        if (!text) return '-';
         const isVisible = visibleHistoryPasswords.has(`new-${record.id}`);
         return (
           <Space>
@@ -524,120 +724,181 @@ const App: React.FC = () => {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Header className="header">
-        <div className="logo">
-          <KeyOutlined /> 密码管理器
-        </div>
-        <div className="header-actions">
-          <Button
-            icon={<DownloadOutlined />}
-            onClick={() => setImportExportVisible(true)}
-          >
-            导入导出
-          </Button>
-          <Button onClick={() => setNoteVisible(true)}>便笺</Button>
-          <Button
-            icon={<SettingOutlined />}
-            onClick={() => setSettingsVisible(true)}
-          >
-            设置
-          </Button>
+        <div className="app-toolbar">
+          <div className="toolbar-left">
+            <div className="logo"><KeyOutlined /> Mylo</div>
+            <Segmented
+              value={currentModule}
+              onChange={(v) => setCurrentModule(v as any)}
+              options={[
+                { label: '密码', value: 'password' },
+                { label: '便笺', value: 'notes' }
+              ]}
+            />
+          </div>
+          <div className="toolbar-center">
+            <Input.Search 
+              allowClear 
+              placeholder={currentModule === 'password' ? '搜索密码：标题/用户名/URL' : '搜索便笺标题'} 
+              className="header-search"
+              onSearch={async (value) => {
+                try {
+                  if (!value || value.trim() === '') { return; }
+                  setSearchQuery(value);
+                  const [pw, nt] = await Promise.all([
+                    window.electronAPI.searchPasswords(value),
+                    window.electronAPI.searchNotesTitle(value)
+                  ]);
+                  setGlobalSearchPasswords(pw || []);
+                  setGlobalSearchNotes(nt || []);
+                  setSelectedPwIndex(0);
+                  setSelectedNoteIndex(0);
+                  setGlobalSearchActiveTab(currentModule === 'password' ? 'pw' : 'nt');
+                  setGlobalSearchVisible(true);
+                } catch { message.error('搜索失败'); }
+              }}
+            />
+          </div>
+          <div className="toolbar-right header-actions">
+            <Button icon={<DownloadOutlined />} onClick={() => setImportExportVisible(true)}>导入导出</Button>
+            <Button icon={<SettingOutlined />} onClick={() => setSettingsVisible(true)}>设置</Button>
+          </div>
         </div>
       </Header>
-      
       <Layout>
         <Sider width={250} style={{ background: '#fff', borderRight: '1px solid #f0f0f0' }}>
           <div style={{ padding: '16px' }}>
-            <Button
-              icon={<FolderAddOutlined />}
-              onClick={handleAddGroup}
-              style={{ width: '100%', marginBottom: '16px' }}
-            >
-              新建分组
-            </Button>
-            
-            <div style={{ marginBottom: '8px', fontSize: '14px', fontWeight: 'bold', color: '#666' }}>
-              分组列表
-            </div>
-            
-            <Tree
-              key={treeKey}
-              showLine
-              treeData={treeData}
-              onSelect={handleGroupSelect}
-              selectedKeys={selectedGroupId ? [selectedGroupId.toString()] : []}
-              style={{ background: 'transparent' }}
-              defaultExpandAll={true}
-              expandAction="click"
-              expandedKeys={expandedKeys}
-              onExpand={(keys) => setExpandedKeys(keys as string[])}
-            />
+            <Button icon={<FolderAddOutlined />} onClick={currentModule === 'password' ? handleAddGroup : handleAddNoteGroup} style={{ width: '100%', marginBottom: '16px' }}>新建分组</Button>
+            <div style={{ marginBottom: '8px', fontSize: '14px', fontWeight: 'bold', color: '#666' }}>分组列表</div>
+            {currentModule === 'password' ? (
+              <Tree key={treeKey} showLine treeData={treeData} onSelect={handleGroupSelect} selectedKeys={selectedGroupId ? [selectedGroupId.toString()] : []} style={{ background: 'transparent' }} defaultExpandAll={true} expandAction="click" expandedKeys={expandedKeys} onExpand={(keys) => setExpandedKeys(keys as string[])} draggable onDrop={async (info) => {
+                try {
+                  const dragKey = parseInt((info.dragNode.key as string));
+                  const dropKey = parseInt((info.node.key as string));
+                  const dropToGap = info.dropToGap;
+                  const findParent = (tree: any[], childId: number, parentId: number | null = null): number | null => {
+                    for (const node of tree) {
+                      if (node.id === childId) return parentId;
+                      const p = findParent(node.children || [], childId, node.id ?? null);
+                      if (p !== null) return p;
+                    }
+                    return null;
+                  };
+                  const newParentId = dropToGap ? findParent(groupTree as any, dropKey) : dropKey;
+                  const collectSiblings = (tree: any[], parentId: number | null) => {
+                    const res: any[] = [];
+                    const walk = (nodes: any[], pid: number | null) => {
+                      for (const n of nodes) {
+                        const p = n.parent_id ?? null;
+                        if (p === pid) res.push(n);
+                        if (n.children && n.children.length) walk(n.children, n.id ?? null);
+                      }
+                    };
+                    walk(tree as any, parentId);
+                    return res;
+                  };
+                  const siblings = collectSiblings(groupTree as any, newParentId);
+                  const targetIndex = siblings.findIndex(s => (s.id as number) === dropKey);
+                  const insertIndex = dropToGap ? (info.dropPosition < 0 ? targetIndex : targetIndex + 1) : siblings.length;
+                  const moved = siblings.filter(s => (s.id as number) !== dragKey);
+                  const newOrder = [ ...moved.slice(0, insertIndex), { id: dragKey }, ...moved.slice(insertIndex) ];
+                  const parentIdToSend = newParentId ?? undefined;
+                  const findLocalGroup = (id: number) => groups.find(g => g.id === id);
+                  const dragGroup = findLocalGroup(dragKey);
+                  const result = await window.electronAPI.updateGroup(dragKey, { name: dragGroup?.name || '', color: dragGroup?.color, parent_id: parentIdToSend, sort: insertIndex } as any);
+                  if (!result.success) { message.error((result as any).error || '分组移动失败'); return; }
+                  for (let i = 0; i < newOrder.length; i++) {
+                    const id = newOrder[i].id as number;
+                    const g = findLocalGroup(id);
+                    await window.electronAPI.updateGroup(id, { name: g?.name || '', color: g?.color, sort: i, parent_id: parentIdToSend } as any);
+                  }
+                  const tree = await window.electronAPI.getGroupTree();
+                  setGroupTree(tree || []);
+                  message.success('分组已移动');
+                } catch {
+                  message.error('分组移动失败');
+                }
+              }} />
+            ) : (
+              <Tree showLine treeData={noteTreeData} onSelect={handleNoteGroupSelect} selectedKeys={selectedNoteGroupId ? [selectedNoteGroupId.toString()] : []} style={{ background: 'transparent' }} defaultExpandAll={true} expandAction="click" draggable onDrop={async (info) => {
+                try {
+                  const dragKey = parseInt((info.dragNode.key as string));
+                  const dropKey = parseInt((info.node.key as string));
+                  const dropToGap = info.dropToGap;
+                  const findParent = (tree: any[], childId: number, parentId: number | null = null): number | null => {
+                    for (const node of tree) {
+                      if (node.id === childId) return parentId;
+                      const p = findParent(node.children || [], childId, node.id ?? null);
+                      if (p !== null) return p;
+                    }
+                    return null;
+                  };
+                  const newParentId = dropToGap ? findParent(noteGroupTree as any, dropKey) : dropKey;
+                  const collectSiblings = (tree: any[], parentId: number | null) => {
+                    const res: any[] = [];
+                    const walk = (nodes: any[], pid: number | null) => {
+                      for (const n of nodes) {
+                        const p = n.parent_id ?? null;
+                        if (p === pid) res.push(n);
+                        if (n.children && n.children.length) walk(n.children, n.id ?? null);
+                      }
+                    };
+                    walk(tree as any, parentId);
+                    return res;
+                  };
+                  const siblings = collectSiblings(noteGroupTree as any, newParentId);
+                  const targetIndex = siblings.findIndex(s => (s.id as number) === dropKey);
+                  const insertIndex = dropToGap ? (info.dropPosition < 0 ? targetIndex : targetIndex + 1) : siblings.length;
+                  const moved = siblings.filter(s => (s.id as number) !== dragKey);
+                  const newOrder = [ ...moved.slice(0, insertIndex), { id: dragKey }, ...moved.slice(insertIndex) ];
+                  const findLocalNoteGroup = (id: number) => noteGroups.find(g => g.id === id);
+                  const dragNoteGroup = findLocalNoteGroup(dragKey);
+                  const result = await window.electronAPI.updateNoteGroup(dragKey, { name: dragNoteGroup?.name || '', color: dragNoteGroup?.color, parent_id: newParentId, sort_order: insertIndex } as any);
+                  if (!result.success) { message.error(result.error || '分组移动失败'); return; }
+                  for (let i = 0; i < newOrder.length; i++) {
+                    const id = newOrder[i].id as number;
+                    const g = findLocalNoteGroup(id);
+                    await window.electronAPI.updateNoteGroup(id, { name: g?.name || '', color: g?.color, sort_order: i, parent_id: newParentId } as any);
+                  }
+                  const tree = await window.electronAPI.getNoteGroupTree();
+                  const list = await window.electronAPI.getNoteGroups();
+                  setNoteGroupTree(tree || []);
+                  setNoteGroups(list || []);
+                  message.success('分组已移动');
+                } catch {
+                  message.error('分组移动失败');
+                }
+              }} />
+            )}
           </div>
         </Sider>
         
         <Layout style={{ padding: '24px' }}>
           <Content style={{ background: '#fff', padding: '24px', borderRadius: '8px' }}>
-            <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 style={{ margin: 0, whiteSpace: 'nowrap' }}>
-                {searchQuery
-                  ? '搜索结果'
-                  : selectedGroupId
-                    ? groups.find(g => g.id === selectedGroupId)?.name
-                    : '最新记录'}
-              </h2>
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={handleAdd}
-              >
-                添加密码
-              </Button>
-            </div>
-
-            <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between' }}>
-              <Input.Search
-                allowClear
-                placeholder="搜索标题、用户名、URL"
-                onSearch={async (value) => {
-                  setSearchQuery(value);
-                  if (!value) {
-                    setSelectedGroupId(undefined);
-                    await loadRecentPasswords();
-                    return;
-                  }
-                  try {
-                    const result = await window.electronAPI.searchPasswords(value);
-                    const formatted: Password[] = (result || []).map((item: any) => ({
-                      ...item,
-                      created_at: item.created_at,
-                      updated_at: item.updated_at,
-                      multi_accounts: item.multiAccounts || item.multi_accounts,
-                    }));
-                    setSelectedGroupId(undefined);
-                    setPasswords(formatted);
-                  } catch (error) {
-                    message.error('搜索失败');
-                  }
-                }}
-                style={{ maxWidth: 360 }}
-              />
-            </div>
-            
-            <Table
-              columns={columns}
-              dataSource={passwords}
-              rowKey="id"
-              loading={loading}
-              pagination={{
-                total: passwords.length,
-                pageSize: 10,
-                showSizeChanger: true,
-                showQuickJumper: true,
-                showTotal: (total) => `共 ${total} 条记录`,
-              }}
-            />
+            {currentModule === 'password' ? (
+              <>
+                <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h2 style={{ margin: 0, whiteSpace: 'nowrap' }}>
+                    {searchQuery ? '搜索结果' : selectedGroupId ? groups.find(g => g.id === selectedGroupId)?.name : '最新记录'}
+                  </h2>
+                  <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>添加密码</Button>
+                </div>
+                <Table columns={columns} dataSource={passwords} rowKey="id" loading={loading} pagination={{ total: passwords.length, pageSize: 10, showSizeChanger: true, showQuickJumper: true, showTotal: (total) => `共 ${total} 条记录` }} />
+              </>
+            ) : (
+              <>
+                <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h2 style={{ margin: 0, whiteSpace: 'nowrap' }}>
+                    {selectedNoteGroupId ? noteGroups.find(g => g.id === selectedNoteGroupId)?.name || '便笺' : '最新便笺'}
+                  </h2>
+                  <Button type="primary" icon={<PlusOutlined />} onClick={() => setNoteCreateSignal(s => s + 1)}>添加便笺</Button>
+                </div>
+                <NoteManager onClose={() => {}} selectedGroupId={selectedNoteGroupId} externalGroups={noteGroups as any} hideTopFilter createSignal={noteCreateSignal} openNoteId={noteOpenId} openSignal={noteOpenSignal} createTemplate={undefined} templateSignal={0} />
+              </>
+            )}
           </Content>
         </Layout>
-      </Layout>
+       </Layout>
 
       <PasswordDetailModal
         visible={modalVisible}
@@ -763,8 +1024,72 @@ const App: React.FC = () => {
         onClose={() => setImportExportVisible(false)}
       />
 
-      <Modal title="便笺" open={noteVisible} onCancel={() => setNoteVisible(false)} footer={null} width={900}>
-        <NoteManager onClose={() => setNoteVisible(false)} />
+      
+      <Modal title={editingNoteGroup ? '编辑便笺分组' : '新建便笺分组'} open={noteGroupModalVisible} onCancel={() => setNoteGroupModalVisible(false)} footer={null}>
+        <Form form={noteGroupForm} layout="vertical" onFinish={handleSubmitNoteGroup}>
+          <Form.Item name="name" label="分组名称" rules={[{ required: true, message: '请输入分组名称' }]}>
+            <Input placeholder="分组名称" />
+          </Form.Item>
+          <Form.Item name="parent_id" label="父级分组">
+            <Select placeholder="选择父级分组" allowClear>
+              {(noteGroups || []).filter((g) => !editingNoteGroup || g.id !== editingNoteGroup.id).map(group => (
+                <Option key={group.id} value={group.id as number}>{group.name}</Option>
+              ))}
+            </Select>
+          </Form.Item>
+          <Form.Item name="color" label="颜色" initialValue="blue">
+            <Select>
+              <Option value="blue">蓝色</Option>
+              <Option value="green">绿色</Option>
+              <Option value="red">红色</Option>
+              <Option value="orange">橙色</Option>
+              <Option value="purple">紫色</Option>
+              <Option value="cyan">青色</Option>
+              <Option value="magenta">洋红色</Option>
+              <Option value="yellow">黄色</Option>
+              <Option value="pink">粉色</Option>
+              <Option value="geekblue">极客蓝</Option>
+            </Select>
+          </Form.Item>
+          <Form.Item>
+            <Space>
+              <Button type="primary" htmlType="submit">{editingNoteGroup ? '更新' : '添加'}</Button>
+              <Button onClick={() => setNoteGroupModalVisible(false)}>取消</Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      
+
+      <Modal title="全局搜索" open={globalSearchVisible} onCancel={() => setGlobalSearchVisible(false)} footer={null} width={900}>
+        <Tabs activeKey={globalSearchActiveTab} onChange={(k) => setGlobalSearchActiveTab(k as any)} items={[
+          { key: 'pw', label: `密码（${globalSearchPasswords.length}）`, children: (
+            <Table size="small" pagination={{ pageSize: 10 }} rowKey="id" dataSource={globalSearchPasswords} columns={[
+              { title: '标题', dataIndex: 'title' },
+              { title: '用户名', dataIndex: 'username' },
+              { title: '分组', dataIndex: 'group_id', render: (gid: number) => { const g = groups.find(x => x.id === gid); return g ? g.name : '未分组'; } },
+              { title: '操作', render: (_: any, row: any) => (<Button size="small" onClick={() => { setCurrentModule('password'); setEditingPassword(row); setPasswordDetailMode('view'); setModalVisible(true); setGlobalSearchVisible(false); }}>打开</Button>) }
+            ]} />
+          ) },
+          { key: 'nt', label: `便笺（${globalSearchNotes.length}）`, children: (
+            <Table size="small" pagination={{ pageSize: 10 }} rowKey="id" dataSource={globalSearchNotes} columns={[
+              { title: '标题', dataIndex: 'title' },
+              { title: '分组', dataIndex: 'group_id', render: (gid: number) => { const g = noteGroups.find(x => x.id === gid); return g ? g.name : '未分组'; } },
+              { title: '更新时间', dataIndex: 'updated_at' },
+              { title: '操作', render: (_: any, row: any) => (<Button size="small" onClick={() => { setCurrentModule('notes'); setGlobalSearchVisible(false); setNoteOpenId(row.id); setNoteOpenSignal(s => s + 1); }}>打开</Button>) }
+            ]} />
+          ) }
+        ]} />
+      </Modal>
+
+      <Modal title="命令面板" open={cmdPaletteVisible} onCancel={() => setCmdPaletteVisible(false)} footer={null}>
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Button onClick={() => { setCurrentModule('password'); setCmdPaletteVisible(false); }}>切换到密码模块</Button>
+          <Button onClick={() => { setCurrentModule('notes'); setCmdPaletteVisible(false); }}>切换到便笺模块</Button>
+          <Button onClick={() => { if (currentModule === 'password') { handleAdd(); } else { setNoteCreateSignal((s) => s + 1); } setCmdPaletteVisible(false); }}>快速新建当前模块条目</Button>
+        </Space>
+        <div style={{ marginTop: 8, color: '#999' }}>快捷键：⌘1/⌘2 切模块 · ⌘F 搜索 · ⌘N 新建 · ⌘K 打开此面板</div>
       </Modal>
     </Layout>
   );

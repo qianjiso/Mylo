@@ -96,6 +96,9 @@ export default class NoteService {
 
   public saveNote(note: SecureRecord): number {
     if (!note.content_ciphertext || String(note.content_ciphertext).trim().length === 0) throw new Error('内容不能为空');
+    if (!note.group_id) throw new Error('分组必须选择');
+    const g = this.db.prepare('SELECT id FROM secure_record_groups WHERE id = ?').get(note.group_id);
+    if (!g) throw new Error('指定的分组不存在');
     const now = new Date().toISOString();
     const enc = this.crypto.encrypt(note.content_ciphertext);
     if (note.id) {
@@ -160,4 +163,3 @@ export default class NoteService {
     }
   }
 }
-

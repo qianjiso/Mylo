@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>主界面 - 模块切换与便捷流程</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --primary:#007AFF; --success:#34C759; --warning:#FF9500; --danger:#FF3B30;
+    --bg:#F2F2F7; --card:#FFFFFF; --text:#000000; --sub:#8E8E93; --border:#C6C6C8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  .shell { display:flex; flex-direction:column; min-width:980px; min-height:640px; }
+  .topbar {
+    height:56px; display:flex; align-items:center; gap:16px;
+    padding:0 16px; background:#fff; border-bottom:1px solid var(--border);
+  }
+  .brand { font-weight:600; }
+  .tabs { display:flex; gap:8px; }
+  .tab {
+    padding:8px 12px; border-radius:10px; cursor:pointer; border:1px solid var(--border); background:#fff;
+  }
+  .tab.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+  .search-global { flex:1; padding:8px 12px; border:1px solid var(--border); border-radius:10px; outline:none; }
+  .top-actions { display:flex; gap:8px; }
+  .btn { padding:8px 12px; border-radius:10px; border:1px solid var(--border); background:#fff; cursor:pointer; }
+  .btn.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+  .layout { flex:1; display:flex; }
+  .sidebar {
+    width:300px; background:#fff; border-right:1px solid var(--border); padding:12px 12px 16px;
+  }
+  .panel-title { font-size:13px; color:var(--sub); margin:8px 0; }
+  .group-list { display:flex; flex-direction:column; gap:6px; }
+  .group-item {
+    display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-radius:8px; cursor:pointer;
+  }
+  .group-item:hover { background:#f7f7f7; }
+  .group-left { display:flex; align-items:center; gap:8px; }
+  .dot { width:12px; height:12px; border-radius:50%; }
+  .count { font-size:12px; color:var(--sub); }
+  .tree { display:flex; flex-direction:column; gap:6px; }
+  .node { display:flex; align-items:center; justify-content:space-between; padding:6px 10px; border-radius:8px; }
+  .node:hover { background:#f7f7f7; }
+  .node-left { display:flex; align-items:center; gap:8px; }
+  .tri { width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent; border-top:7px solid #8E8E93; transform: rotate(90deg); }
+  .side-actions { margin-top:10px; display:flex; gap:8px; }
+  .side-card {
+    margin-top:12px; border:1px dashed var(--border); border-radius:10px; padding:10px; background:#fff;
+  }
+  .row { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+  .input { flex:1; padding:8px 10px; border:1px solid var(--border); border-radius:8px; }
+  .swatch { display:flex; gap:6px; }
+  .sw { width:18px; height:18px; border-radius:50%; border:1px solid #ddd; cursor:pointer; }
+  .content { flex:1; display:flex; flex-direction:column; }
+  .toolbar {
+    display:flex; gap:10px; align-items:center; padding:12px 16px; border-bottom:1px solid var(--border); background:#fff;
+  }
+  .search { flex:1; padding:8px 12px; border:1px solid var(--border); border-radius:10px; outline:none; }
+  .list { padding:16px; display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; }
+  .item { background:#fff; border:1px solid var(--border); border-radius:12px; padding:12px; display:flex; gap:12px; }
+  .item-icon { font-size:18px; }
+  .item-body { flex:1; }
+  .item-title { font-weight:600; }
+  .item-sub { font-size:12px; color:var(--sub); margin-top:4px; }
+  .pills { display:flex; gap:8px; }
+  .pill { padding:6px 10px; border-radius:999px; border:1px solid var(--border); background:#fff; cursor:pointer; }
+  .pill.danger { border-color:var(--danger); color:var(--danger); }
+  .table { padding:16px; }
+  table { width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  th, td { border-bottom:1px solid var(--border); padding:10px 12px; font-size:13px; text-align:left; }
+  thead th { background:#fafafa; }
+  .tag { display:inline-block; padding:4px 8px; border-radius:999px; border:1px solid var(--border); font-size:12px; }
+  .editor { border-top:1px solid var(--border); background:#fff; padding:16px; display:flex; flex-direction:column; gap:10px; }
+  .textarea { width:100%; min-height:140px; resize:vertical; padding:10px; border:1px solid var(--border); border-radius:10px; }
+  .modal {
+    position:fixed; inset:0; background:rgba(0,0,0,.25); display:none; align-items:center; justify-content:center;
+  }
+  .modal .box { width:520px; background:#fff; border-radius:12px; border:1px solid var(--border); padding:16px; }
+  .modal.open { display:flex; }
+  .kbd { font-family:SF Mono, Menlo, monospace; border:1px solid var(--border); border-bottom-width:2px; padding:2px 6px; border-radius:6px; background:#fff; font-size:12px; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<div class="shell" data-module="password">
+  <div class="topbar">
+    <div class="brand">Mima</div>
+    <div class="tabs">
+      <div class="tab" data-tab="password">密码</div>
+      <div class="tab" data-tab="notes">便笺</div>
+    </div>
+    <input class="search-global" placeholder="🔍 全局搜索：密码标题/用户名/URL；便笺标题" />
+    <div class="top-actions">
+      <button class="btn primary" id="quick-new">+ 快速新建</button>
+      <button class="btn" id="cmd-palette">命令面板</button>
+      <button class="btn">设置</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="panel-title">分组（随模块切换）</div>
+
+      <div id="groups-password">
+        <div class="group-list">
+          <div class="group-item">
+            <div class="group-left"><div class="dot" style="background:#007AFF;"></div><div>社交媒体</div></div><div class="count">5</div>
+          </div>
+          <div class="group-item">
+            <div class="group-left"><div class="dot" style="background:#34C759;"></div><div>工作</div></div><div class="count">4</div>
+          </div>
+          <div class="group-item">
+            <div class="group-left"><div class="dot" style="background:#FF9500;"></div><div>购物</div></div><div class="count">3</div>
+          </div>
+          <div class="group-item">
+            <div class="group-left"><div class="dot" style="background:#8E8E93;"></div><div>未分组</div></div><div class="count">12</div>
+          </div>
+        </div>
+        <div class="side-actions">
+          <button class="btn primary">+ 新建分组</button>
+          <button class="btn">编辑</button>
+        </div>
+      </div>
+
+      <div id="groups-notes" class="hidden">
+        <div class="tree">
+          <div class="node">
+            <div class="node-left"><div class="tri"></div><div class="dot" style="background:#007AFF;"></div><div>团队共享</div></div><div class="count">8</div>
+          </div>
+          <div class="node" style="margin-left:24px;">
+            <div class="node-left"><div class="dot" style="background:#34C759;"></div><div>需求讨论</div></div><div class="count">3</div>
+          </div>
+          <div class="node">
+            <div class="node-left"><div class="tri"></div><div class="dot" style="background:#FF9500;"></div><div>临时记录</div></div><div class="count">5</div>
+          </div>
+          <div class="node">
+            <div class="node-left"><div class="tri" style="opacity:.3;"></div><div class="dot" style="background:#8E8E93;"></div><div>未分组</div></div><div class="count">12</div>
+          </div>
+        </div>
+        <div class="side-actions">
+          <button class="btn primary">+ 新建分组</button>
+          <button class="btn">重命名</button>
+          <button class="btn">删除</button>
+        </div>
+        <div class="side-card">
+          <div class="panel-title">分组信息</div>
+          <div class="row"><span style="width:56px;">名称</span><input class="input" value="团队共享" /></div>
+          <div class="row"><span style="width:56px;">颜色</span>
+            <div class="swatch">
+              <div class="sw" style="background:#007AFF;"></div>
+              <div class="sw" style="background:#34C759;"></div>
+              <div class="sw" style="background:#FF9500;"></div>
+              <div class="sw" style="background:#FF3B30;"></div>
+              <div class="sw" style="background:#8E8E93;"></div>
+            </div>
+          </div>
+          <div class="row"><span style="width:56px;">描述</span><input class="input" placeholder="用于团队共享的临时便笺" /></div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="content">
+      <div class="toolbar" id="toolbar-password">
+        <input class="search" placeholder="🔍 搜索密码：标题 / 用户名 / URL" />
+        <button class="btn primary">+ 新建密码</button>
+        <button class="btn">批量操作</button>
+        <button class="btn">筛选 ▾</button>
+        <button class="btn">排序 ▾</button>
+      </div>
+      <section class="list" id="content-password">
+        <div class="item">
+          <div class="item-icon">🔒</div>
+          <div class="item-body">
+            <div class="item-title">Google</div>
+            <div class="item-sub">user@gmail.com · 2 分钟前更新</div>
+          </div>
+          <div class="pills">
+            <div class="pill">👁️ 显示</div>
+            <div class="pill">📋 复制</div>
+            <div class="pill danger">🗑️ 删除</div>
+          </div>
+        </div>
+        <div class="item">
+          <div class="item-icon">🏦</div>
+          <div class="item-body">
+            <div class="item-title">中国银行</div>
+            <div class="item-sub">••••••••1234 · 1 天前更新</div>
+          </div>
+          <div class="pills">
+            <div class="pill">👁️ 显示</div>
+            <div class="pill">📋 复制</div>
+            <div class="pill danger">🗑️ 删除</div>
+          </div>
+        </div>
+      </section>
+
+      <div class="toolbar hidden" id="toolbar-notes">
+        <input class="search" placeholder="🔍 搜索便笺标题..." />
+        <button class="btn primary">+ 新建便笺</button>
+        <button class="btn">批量操作</button>
+        <button class="btn">筛选 ▾</button>
+        <button class="btn">排序 ▾</button>
+      </div>
+      <div class="table hidden" id="content-notes">
+        <table>
+          <thead><tr><th>标题</th><th>分组</th><th>置顶</th><th>归档</th><th>更新时间</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>账号列表与说明</td>
+              <td><span class="tag">团队共享</span></td>
+              <td>★</td>
+              <td>否</td>
+              <td>2025-11-10</td>
+              <td><span class="pill">✏️ 编辑</span><span class="pill">📋 复制</span><span class="pill danger">🗑️ 删除</span></td>
+            </tr>
+            <tr>
+              <td>临时环境说明</td>
+              <td><span class="tag">临时记录</span></td>
+              <td>☆</td>
+              <td>否</td>
+              <td>2025-11-03</td>
+              <td><span class="pill">✏️ 编辑</span><span class="pill">📋 复制</span><span class="pill danger">🗑️ 删除</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="editor hidden" id="editor-notes">
+        <div style="display:flex; gap:10px;">
+          <input class="input" placeholder="标题：" value="临时环境说明" />
+          <select class="input" style="max-width:220px;">
+            <option>未分组</option><option selected>临时记录</option><option>团队共享</option>
+          </select>
+          <button class="btn">置顶</button>
+          <button class="btn">归档</button>
+        </div>
+        <textarea class="textarea" placeholder="正文：自由文本，无模板">这里是自由文本内容……</textarea>
+        <div style="display:flex; gap:8px; justify-content:flex-end;">
+          <button class="btn">取消</button>
+          <button class="btn primary">保存</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal" id="modal-quick">
+    <div class="box">
+      <div style="font-weight:600; margin-bottom:8px;">快速新建</div>
+      <div class="row">
+        <button class="btn primary" style="flex:1;">新建密码条目</button>
+        <button class="btn primary" style="flex:1;">新建便笺</button>
+      </div>
+      <div class="row">
+        <select class="input"><option>选择分组（可选）</option><option>社交媒体</option><option>工作</option><option>临时记录</option></select>
+        <button class="btn">关闭</button>
+      </div>
+      <div style="margin-top:8px; color:var(--sub); font-size:12px;">快捷键 <span class="kbd">⌘N</span> 新建 · <span class="kbd">⌘1/⌘2</span> 切模块</div>
+    </div>
+  </div>
+
+  <div class="modal" id="modal-cmd">
+    <div class="box">
+      <div style="font-weight:600; margin-bottom:8px;">命令面板</div>
+      <input class="input" placeholder="输入命令：新建、移动到分组、置顶、归档、批量删除..." />
+      <div class="row" style="margin-top:8px;">
+        <button class="btn" style="flex:1;">新建密码条目</button>
+        <button class="btn" style="flex:1;">新建便笺</button>
+        <button class="btn" style="flex:1;">移动到分组</button>
+      </div>
+      <div style="margin-top:8px; color:var(--sub); font-size:12px;">快捷键 <span class="kbd">⌘K</span> 打开 · <span class="kbd">Esc</span> 关闭</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const shell = document.querySelector('.shell');
+  const tabPassword = document.querySelector('[data-tab="password"]');
+  const tabNotes = document.querySelector('[data-tab="notes"]');
+  const groupsPassword = document.getElementById('groups-password');
+  const groupsNotes = document.getElementById('groups-notes');
+  const toolbarPassword = document.getElementById('toolbar-password');
+  const toolbarNotes = document.getElementById('toolbar-notes');
+  const contentPassword = document.getElementById('content-password');
+  const contentNotes = document.getElementById('content-notes');
+  const editorNotes = document.getElementById('editor-notes');
+  const quickBtn = document.getElementById('quick-new');
+  const cmdBtn = document.getElementById('cmd-palette');
+  const modalQuick = document.getElementById('modal-quick');
+  const modalCmd = document.getElementById('modal-cmd');
+
+  function setModule(mod) {
+    shell.setAttribute('data-module', mod);
+    tabPassword.classList.toggle('active', mod === 'password');
+    tabNotes.classList.toggle('active', mod === 'notes');
+    groupsPassword.classList.toggle('hidden', mod !== 'password');
+    groupsNotes.classList.toggle('hidden', mod !== 'notes');
+    toolbarPassword.classList.toggle('hidden', mod !== 'password');
+    toolbarNotes.classList.toggle('hidden', mod !== 'notes');
+    contentPassword.classList.toggle('hidden', mod !== 'password');
+    contentNotes.classList.toggle('hidden', mod !== 'notes');
+    editorNotes.classList.toggle('hidden', mod !== 'notes');
+  }
+
+  setModule('password');
+  tabPassword.addEventListener('click', () => setModule('password'));
+  tabNotes.addEventListener('click', () => setModule('notes'));
+
+  function openModal(el) { el.classList.add('open'); }
+  function closeModal(el) { el.classList.remove('open'); }
+  quickBtn.addEventListener('click', () => openModal(modalQuick));
+  cmdBtn.addEventListener('click', () => openModal(modalCmd));
+  document.addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') openModal(modalCmd);
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n') openModal(modalQuick);
+    if ((e.metaKey || e.ctrlKey) && e.key === '1') setModule('password');
+    if ((e.metaKey || e.ctrlKey) && e.key === '2') setModule('notes');
+    if (e.key === 'Escape') { closeModal(modalQuick); closeModal(modalCmd); }
+  });
+  document.querySelectorAll('.modal .box .btn').forEach(b => b.addEventListener('click', () => {
+    const p = b.closest('.modal'); if (p) p.classList.remove('open');
+  }));
+</script>
+</body>
+</html>

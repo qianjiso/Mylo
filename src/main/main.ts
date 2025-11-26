@@ -24,6 +24,7 @@ class PasswordManagerApp {
          
          // 设置IPC处理器
          this.setupIpcHandlers();
+         this.registerWindowIpc();
          
          // 创建主窗口
          this.createMainWindow();
@@ -93,6 +94,23 @@ class PasswordManagerApp {
     });
   }
 
+  public registerWindowIpc(): void {
+    ipcMain.handle('window-minimize', async () => {
+      this.mainWindow?.minimize();
+    });
+    ipcMain.handle('window-toggle-maximize', async () => {
+      if (!this.mainWindow) return;
+      if (this.mainWindow.isMaximized()) {
+        this.mainWindow.unmaximize();
+      } else {
+        this.mainWindow.maximize();
+      }
+    });
+    ipcMain.handle('window-close', async () => {
+      this.mainWindow?.close();
+    });
+  }
+
   private setupIpcHandlers(): void {
     if (!this.databaseService) return;
 
@@ -109,9 +127,18 @@ class PasswordManagerApp {
 
     // 更新密码
     ipcMain.handle('update-password', async (_, id, password) => {
-      const updatedPassword = { ...password, id };
-      this.databaseService!.savePassword(updatedPassword);
-      return { success: true };
+      try {
+        const updatedPassword = { ...password, id };
+        this.databaseService!.savePassword(updatedPassword);
+        return { success: true };
+      } catch (error) {
+        const msg = (error as any)?.message || '更新失败';
+        const code = (error as any)?.code || '';
+        const suggest = code === 'SQLITE_CORRUPT_VTAB' || /malformed/i.test(msg)
+          ? '数据库索引可能已损坏，请备份后尝试“导入导出”或联系支持'
+          : undefined;
+        return { success: false, error: suggest ? `${msg}（${suggest}）` : msg };
+      }
     });
 
     // 删除密码

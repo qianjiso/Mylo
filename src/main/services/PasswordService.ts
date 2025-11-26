@@ -284,12 +284,7 @@ export class PasswordService {
     if (password.url && password.url.length > 2048) throw new Error('URL长度不能超过2048个字符');
     if (password.notes && password.notes.length > 10000) throw new Error('备注长度不能超过10000个字符');
     if (password.multi_accounts && String(password.multi_accounts).length > 50000) throw new Error('多账号信息长度不能超过50000个字符');
-    if (password.url && password.url.trim() !== '') {
-      try { new URL(password.url); } catch {
-        const urlPattern = /^https?:\/\/.+|^[\w.-]+\.[a-zA-Z]{2,}$/;
-        if (!urlPattern.test(password.url)) throw new Error('URL格式不正确');
-      }
-    }
+
   }
 
   /** 确保密码表允许 password 为 NULL，并重建 FTS 触发器 */

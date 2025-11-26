@@ -9,15 +9,13 @@ import {
   message,
   Typography,
   Row,
-  Col,
-  Radio
+  Col
 } from 'antd';
 import { 
   CopyOutlined, 
   EditOutlined,
   DeleteOutlined
 } from '@ant-design/icons';
-import MultiAccountManager from './MultiAccountManager';
 import PasswordGenerator from './PasswordGenerator';
 
 const { Title } = Typography;
@@ -47,10 +45,7 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [multiAccounts, setMultiAccounts] = useState('');
   const [passwordGeneratorVisible, setPasswordGeneratorVisible] = useState(false);
-  const [passwordType, setPasswordType] = useState<'single' | 'multi'>('single');
-  const [multiViewVisible, setMultiViewVisible] = useState(false);
 
   useEffect(() => {
     if (visible && password) {
@@ -62,23 +57,14 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
         notes: password.notes || '',
         group_id: password.group_id || null
       });
-      setMultiAccounts(password.multi_accounts ?? password.multiAccounts ?? '');
       setShowPassword(false);
-      // 根据数据判断密码类型
-      if ((password.multi_accounts ?? password.multiAccounts ?? '').trim()) {
-        setPasswordType('multi');
-      } else {
-        setPasswordType('single');
-      }
     }
   }, [visible, password, form]);
 
   useEffect(() => {
     if (visible && mode === 'create') {
       form.resetFields();
-      setMultiAccounts('');
       setShowPassword(false);
-      setPasswordType('single');
     }
   }, [visible, mode, form]);
 
@@ -87,30 +73,18 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
       const values = await form.validateFields();
       setLoading(true);
 
-      // 根据密码类型处理数据
       const passwordData = {
         ...values,
       };
-
-      if (passwordType === 'single') {
-        (passwordData as any).password = values.password;
-        (passwordData as any).multi_accounts = undefined;
-      } else {
-        (passwordData as any).password = undefined;
-        (passwordData as any).multi_accounts = multiAccounts || undefined;
-      }
 
       if (mode === 'create') {
         await onSave(passwordData);
       } else {
         await onSave({ ...passwordData, id: password.id });
       }
-
-      message.success(mode === 'create' ? '创建成功' : '更新成功');
       onClose();
     } catch (error) {
       console.error('保存失败:', error);
-      message.error('保存失败');
     } finally {
       setLoading(false);
     }
@@ -210,7 +184,7 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
               </Row>
 
               <Row gutter={16}>
-                <Col span={12}>
+                <Col span={24}>
                   <Form.Item
                     label="用户名"
                     name="username"
@@ -233,79 +207,47 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
                     />
                   </Form.Item>
                 </Col>
-                <Col span={12}>
-                  <Form.Item label="密码类型">
-                    <Radio.Group 
-                      value={passwordType} 
-                      onChange={(e) => setPasswordType(e.target.value)}
-                      disabled={isReadonly}
-                    >
-                      <Radio value="single">单一密码</Radio>
-                      <Radio value="multi">多账号密码</Radio>
-                    </Radio.Group>
+              </Row>
+
+              <Row gutter={16}>
+                <Col span={24}>
+                  <Form.Item
+                    label="密码"
+                    name="password"
+                    rules={[{ required: true, message: '请输入密码' }]}
+                  >
+                    <Input.Password
+                      placeholder="请输入密码"
+                      visibilityToggle={{
+                        visible: showPassword,
+                        onVisibleChange: setShowPassword
+                      }}
+                      suffix={
+                        !isReadonly && (
+                          <Space>
+                            <Button
+                              type="text"
+                              icon={<CopyOutlined />}
+                              onClick={() => {
+                                const value = form.getFieldValue('password');
+                                if (value) handleCopy(value, '密码');
+                              }}
+                            />
+                            <Button
+                              type="text"
+                              onClick={() => setPasswordGeneratorVisible(true)}
+                            >
+                              生成
+                            </Button>
+                          </Space>
+                        )
+                      }
+                    />
                   </Form.Item>
                 </Col>
               </Row>
 
-              {passwordType === 'single' ? (
-                <Row gutter={16}>
-                  <Col span={24}>
-                    <Form.Item
-                      label="密码"
-                      name="password"
-                      rules={[{ required: passwordType === 'single', message: '请输入密码' }]}
-                    >
-                      <Input.Password
-                        placeholder="请输入密码"
-                        visibilityToggle={{
-                          visible: showPassword,
-                          onVisibleChange: setShowPassword
-                        }}
-                        suffix={
-                          !isReadonly && (
-                            <Space>
-                              <Button
-                                type="text"
-                                icon={<CopyOutlined />}
-                                onClick={() => {
-                                  const value = form.getFieldValue('password');
-                                  if (value) handleCopy(value, '密码');
-                                }}
-                              />
-                              <Button
-                                type="text"
-                                onClick={() => setPasswordGeneratorVisible(true)}
-                              >
-                                生成
-                              </Button>
-                            </Space>
-                          )
-                        }
-                      />
-                    </Form.Item>
-                  </Col>
-                </Row>
-              ) : null}
-
-              {passwordType === 'multi' ? (
-                <Row gutter={16}>
-                  <Col span={24}>
-                    <Form.Item label="多账号密码管理">
-                      <MultiAccountManager
-                        passwordId={password?.id}
-                        initialData={multiAccounts}
-                        onSave={(data) => setMultiAccounts(data)}
-                        readonly={isReadonly}
-                      />
-                      {!isReadonly && (
-                        <div style={{ textAlign: 'right', marginTop: 8 }}>
-                          <Button type="link" onClick={() => setMultiViewVisible(true)}>放大查看</Button>
-                        </div>
-                      )}
-                    </Form.Item>
-                  </Col>
-                </Row>
-              ) : null}
+              
 
               <Row gutter={16}>
                 <Col span={24}>
@@ -337,6 +279,7 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
                   <Form.Item
                     label="分组"
                     name="group_id"
+                    rules={[{ required: true, message: '请选择分组' }]}
                   >
                     <Select 
                       placeholder="请选择分组" 
@@ -379,19 +322,6 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
         onClose={() => setPasswordGeneratorVisible(false)}
         onGenerate={handleGeneratePassword}
       />
-
-      <Modal
-        title="多账号内容"
-        open={multiViewVisible}
-        onCancel={() => setMultiViewVisible(false)}
-        footer={[
-          <Button key="close" onClick={() => setMultiViewVisible(false)}>关闭</Button>,
-          <Button key="copy" type="primary" onClick={() => handleCopy(multiAccounts, '多账号内容')}>复制</Button>
-        ]}
-        width={900}
-      >
-        <TextArea value={multiAccounts} rows={16} readOnly style={{ fontFamily: 'monospace' }} />
-      </Modal>
     </>
   );
 };

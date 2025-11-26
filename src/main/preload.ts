@@ -103,6 +103,9 @@ export interface ElectronAPI {
   // 系统相关
   getVersion(): Promise<string>;
   quit(): void;
+  minimizeWindow(): Promise<void>;
+  toggleMaximizeWindow(): Promise<void>;
+  closeWindow(): Promise<void>;
   
   // 数据完整性检查
   checkDataIntegrity(): Promise<{
@@ -212,6 +215,9 @@ const electronAPI: ElectronAPI = {
   // 系统相关
   getVersion: () => ipcRenderer.invoke('get-version'),
   quit: () => ipcRenderer.invoke('quit'),
+  minimizeWindow: () => ipcRenderer.invoke('window-minimize'),
+  toggleMaximizeWindow: () => ipcRenderer.invoke('window-toggle-maximize'),
+  closeWindow: () => ipcRenderer.invoke('window-close'),
   
   // 文件操作
   exportData: (options) => ipcRenderer.invoke('export-data', options),

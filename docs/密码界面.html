@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>密码管理 - 设计稿</title>
+<style>
+  :root {
+    --primary: #007AFF;
+    --bg: #F2F2F7;
+    --card: #FFFFFF;
+    --text: #000000;
+    --subtext: #8E8E93;
+    --border: #C6C6C8;
+    --danger: #FF3B30;
+    --success: #34C759;
+    --warning: #FF9500;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "PingFang SC", sans-serif;
+  }
+  .app { display: flex; min-width: 980px; min-height: 640px; }
+  .sidebar {
+    width: 280px; background: #FFF; border-right: 1px solid var(--border); padding: 16px;
+  }
+  .sidebar h2 { margin: 0 0 12px; font-size: 16px; }
+  .group-list { display: flex; flex-direction: column; gap: 8px; }
+  .group-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 10px; border-radius: 8px; cursor: pointer;
+  }
+  .group-item:hover { background: #f7f7f7; }
+  .group-left { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .count { color: var(--subtext); font-size: 12px; }
+  .sidebar .actions { margin-top: 12px; display: flex; gap: 8px; }
+  .btn {
+    padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); background: #fff; cursor: pointer;
+  }
+  .btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .main { flex: 1; display: flex; flex-direction: column; }
+  .toolbar {
+    display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); background: #fff;
+  }
+  .search {
+    flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; outline: none;
+  }
+  .list { padding: 16px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .item {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: flex; gap: 12px;
+  }
+  .item-icon { font-size: 20px; }
+  .item-body { flex: 1; }
+  .item-title { font-weight: 600; }
+  .item-sub { color: var(--subtext); font-size: 12px; margin-top: 4px; }
+  .item-actions { display: flex; gap: 8px; }
+  .pill {
+    padding: 6px 10px; border-radius: 999px; border: 1px solid var(--border); cursor: pointer; background: #fff;
+  }
+  .pill.danger { border-color: var(--danger); color: var(--danger); }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <h2>分组</h2>
+    <div class="group-list">
+      <div class="group-item">
+        <div class="group-left">
+          <div class="dot" style="background:#007AFF;"></div>
+          <div>社交媒体</div>
+        </div>
+        <div class="count">5</div>
+      </div>
+      <div class="group-item">
+        <div class="group-left">
+          <div class="dot" style="background:#34C759;"></div>
+          <div>工作</div>
+        </div>
+        <div class="count">4</div>
+      </div>
+      <div class="group-item">
+        <div class="group-left">
+          <div class="dot" style="background:#FF9500;"></div>
+          <div>购物</div>
+        </div>
+        <div class="count">3</div>
+      </div>
+      <div class="group-item">
+        <div class="group-left">
+          <div class="dot" style="background:#8E8E93;"></div>
+          <div>未分组</div>
+        </div>
+        <div class="count">12</div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn primary">+ 新建分组</button>
+      <button class="btn">编辑</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="toolbar">
+      <input class="search" placeholder="🔍 搜索密码：标题 / 用户名 / URL" />
+      <button class="btn primary">+ 新建密码</button>
+      <button class="btn">排序 ▾</button>
+      <button class="btn">筛选 ▾</button>
+    </div>
+
+    <section class="list">
+      <div class="item">
+        <div class="item-icon">🔒</div>
+        <div class="item-body">
+          <div class="item-title">Google</div>
+          <div class="item-sub">user@gmail.com · 2 分钟前更新</div>
+        </div>
+        <div class="item-actions">
+          <div class="pill">👁️ 显示</div>
+          <div class="pill">📋 复制</div>
+          <div class="pill danger">🗑️ 删除</div>
+        </div>
+      </div>
+
+      <div class="item">
+        <div class="item-icon">🏦</div>
+        <div class="item-body">
+          <div class="item-title">中国银行</div>
+          <div class="item-sub">••••••••1234 · 1 天前更新</div>
+        </div>
+        <div class="item-actions">
+          <div class="pill">👁️ 显示</div>
+          <div class="pill">📋 复制</div>
+          <div class="pill danger">🗑️ 删除</div>
+        </div>
+      </div>
+      <!-- 更多条目示例 -->
+    </section>
+  </main>
+</div>
+</body>
+</html>
