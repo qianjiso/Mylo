@@ -27,6 +27,8 @@ jobs:
 
       - name: Build Windows package
         run: npm run dist:win
+        env:
+          GH_TOKEN: ${{ secrets.DEPLOY }}
 
       - name: Upload artifacts (dist)
         uses: actions/upload-artifact@v4
