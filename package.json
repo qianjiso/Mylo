@@ -1,5 +1,5 @@
 {
-  "name": "password-manager",
+  "name": "Mylo",
   "version": "1.0.0",
   "description": "一个安全的跨平台密码管理应用",
   "main": "dist/main/main.js",
@@ -12,6 +12,7 @@
     "build:renderer": "webpack --config webpack.renderer.config.js --mode production",
     "build:main": "webpack --config webpack.main.config.js --mode production",
     "start": "node scripts/start-electron.js",
+    "postinstall": "electron-builder install-app-deps",
     "pack": "electron-builder --dir",
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac",
@@ -31,7 +32,7 @@
     "react",
     "typescript"
   ],
-  "author": "Your Name",
+  "author": "qianjs",
   "license": "MIT",
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.4",
@@ -81,8 +82,8 @@
     "stream-browserify": "^3.0.0"
   },
   "build": {
-    "appId": "com.yourcompany.password-manager",
-    "productName": "Password Manager",
+    "appId": "com.yourcompany.mylo",
+    "productName": "Mylo",
     "directories": {
       "output": "release"
     },

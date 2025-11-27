@@ -45,3 +45,7 @@ sqlite3 passwords.db "select * from passwords"
     - public savePassword(password: PasswordItem): number { return this.passwordService.savePassword(password); }
  - 真实保存逻辑： src/main/services/PasswordService.ts:65-116
 
+# 6.首次初始化项目
+```shell
+npx electron-builder install-app-deps
+```

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import * as path from 'path';
 import DatabaseService from './database/DatabaseService';
 
@@ -18,19 +18,24 @@ class PasswordManagerApp {
 
     // 当 Electron 完成初始化并准备创建浏览器窗口时调用此方法
     app.whenReady().then(async () => {
-       try {
-         // 初始化数据库服务
-         this.databaseService = new DatabaseService();
-         
-         // 设置IPC处理器
-         this.setupIpcHandlers();
-         this.registerWindowIpc();
-         
-         // 创建主窗口
-         this.createMainWindow();
-       } catch (error) {
-         console.error('Failed to initialize app:', error);
-         app.quit();
+      try {
+        // 初始化数据库服务
+        this.databaseService = new DatabaseService();
+        
+        // 设置IPC处理器
+        this.setupIpcHandlers();
+        this.registerWindowIpc();
+        
+        // 移除非 macOS 平台的默认菜单栏
+        if (process.platform !== 'darwin') {
+          Menu.setApplicationMenu(null);
+        }
+        
+        // 创建主窗口
+        this.createMainWindow();
+      } catch (error) {
+        console.error('Failed to initialize app:', error);
+        app.quit();
        }
       
       app.on('activate', () => {
@@ -71,7 +76,8 @@ class PasswordManagerApp {
         preload: path.join(__dirname, 'preload.js')
       },
       titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-      show: false // 先不显示，等加载完成后再显示
+      show: false, // 先不显示，等加载完成后再显示
+      autoHideMenuBar: process.platform !== 'darwin'
     });
 
     // 加载应用
@@ -85,6 +91,9 @@ class PasswordManagerApp {
 
     // 当窗口准备好显示时显示窗口
     this.mainWindow.once('ready-to-show', () => {
+      if (process.platform !== 'darwin') {
+        this.mainWindow?.setMenuBarVisibility(false);
+      }
       this.mainWindow?.show();
     });
 

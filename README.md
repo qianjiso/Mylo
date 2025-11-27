@@ -90,7 +90,7 @@ mima_package/
 ```
 # 克隆与安装
 git clone <repository-url>
-cd mima_package
+cd .
 npm install
 
 # 开发模式（并发启动主/渲染）
