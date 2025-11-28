@@ -64,6 +64,10 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
   useEffect(() => {
     if (visible && mode === 'create') {
       form.resetFields();
+      const gid = password?.group_id ?? null;
+      if (gid !== null && typeof gid !== 'undefined') {
+        form.setFieldsValue({ group_id: gid });
+      }
       setShowPassword(false);
     }
   }, [visible, mode, form]);
@@ -102,6 +106,7 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
   const handleGeneratePassword = (generatedPassword: string) => {
     form.setFieldsValue({ password: generatedPassword });
     setPasswordGeneratorVisible(false);
+    setShowPassword(true);
     message.success('密码已生成');
   };
 
@@ -233,12 +238,7 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
                                 if (value) handleCopy(value, '密码');
                               }}
                             />
-                            <Button
-                              type="text"
-                              onClick={() => setPasswordGeneratorVisible(true)}
-                            >
-                              生成
-                            </Button>
+                            <Button type="text" onClick={() => setPasswordGeneratorVisible(true)}>生成</Button>
                           </Space>
                         )
                       }

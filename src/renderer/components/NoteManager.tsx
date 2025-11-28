@@ -121,6 +121,7 @@ const NoteManager: React.FC<{ onClose: () => void; selectedGroupId?: number; ext
   const handleAdd = () => {
     setEditingNote(null);
     form.resetFields();
+    form.setFieldsValue({ group_id: selectedGroupId || undefined });
     setEditVisible(true);
   };
 

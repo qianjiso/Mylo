@@ -77,23 +77,23 @@ export class PasswordService {
     const encryptedMultiAccounts = password.multi_accounts ? this.crypto.encrypt(password.multi_accounts) : null;
 
     if (password.id) {
-      const oldRow = this.db.prepare('SELECT password FROM passwords WHERE id = ?').get(password.id) as { password: string } | undefined;
+      const oldRow = this.db.prepare('SELECT password, multi_accounts FROM passwords WHERE id = ?').get(password.id) as { password: string; multi_accounts?: string } | undefined;
       const stmt = this.db.prepare(
         `UPDATE passwords SET title = ?, username = ?, password = ?, url = ?, notes = ?, multi_accounts = ?, group_id = ?, updated_at = ? WHERE id = ?`
       );
       stmt.run(
         password.title,
         password.username,
-        encryptedPassword,
+        encryptedPassword ?? (oldRow ? oldRow.password : null),
         password.url || null,
         password.notes || null,
-        encryptedMultiAccounts,
+        encryptedMultiAccounts ?? (oldRow?.multi_accounts ?? null),
         password.group_id || null,
         now,
         password.id
       );
       if (oldRow && encryptedPassword && oldRow.password !== encryptedPassword) {
-        this.savePasswordHistory(password.id, oldRow.password, encryptedPassword, '手动更新');
+        this.savePasswordHistory(password.id, oldRow.password, encryptedPassword, undefined);
       }
       return password.id;
     } else {
@@ -280,7 +280,7 @@ export class PasswordService {
     if (password.username.length > 255) throw new Error('用户名长度不能超过255个字符');
     const hasSingle = !!(password.password && password.password.trim().length > 0);
     const hasMulti = !!(password.multi_accounts && String(password.multi_accounts).trim().length > 0);
-    if (!hasSingle && !hasMulti) throw new Error('密码不能为空');
+    if (!hasSingle && !hasMulti && !password.id) throw new Error('密码不能为空');
     if (password.url && password.url.length > 2048) throw new Error('URL长度不能超过2048个字符');
     if (password.notes && password.notes.length > 10000) throw new Error('备注长度不能超过10000个字符');
     if (password.multi_accounts && String(password.multi_accounts).length > 50000) throw new Error('多账号信息长度不能超过50000个字符');

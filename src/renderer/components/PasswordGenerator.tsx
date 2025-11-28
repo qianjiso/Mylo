@@ -130,6 +130,7 @@ const PasswordGenerator: React.FC<PasswordGeneratorProps> = ({
               value={generatedPassword}
               readOnly
               style={{ fontFamily: 'monospace' }}
+              visibilityToggle={{ visible: true }}
             />
           </Form.Item>
         )}

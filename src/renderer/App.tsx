@@ -194,11 +194,6 @@ const App: React.FC = () => {
     form.setFieldsValue(record);
   };
 
-  const handleView = (record: Password) => {
-    setEditingPassword(record);
-    setPasswordDetailMode('view');
-    setModalVisible(true);
-  };
 
   const handleDelete = async (id: number) => {
     try {
@@ -643,9 +638,6 @@ const App: React.FC = () => {
       width: 160,
       render: (_, record) => (
         <Space size={4}>
-          <Tooltip title="查看">
-            <Button type="text" size="small" icon={<EyeOutlined />} onClick={() => handleView(record)} />
-          </Tooltip>
           <Tooltip title="历史">
             <Button type="text" size="small" icon={<HistoryOutlined />} onClick={() => handleViewHistory(record)} />
           </Tooltip>
