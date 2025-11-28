@@ -49,3 +49,10 @@ sqlite3 passwords.db "select * from passwords"
 ```shell
 npx electron-builder install-app-deps
 ```
+
+# 7. MAC崩溃定位分析
+## 1.查看系统崩溃报告：
+- 打开 Console.app ，定位到 Crash Reports ，查找 Mylo 的条目
+- 或在 ~/Library/Logs/DiagnosticReports/ 查找 Mylo_*.crash
+## 2.应用日志
+- 应用启动日志写入 ~/Library/Application Support/Mylo/electron.log

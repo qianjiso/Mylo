@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import * as path from 'path';
+import { app } from 'electron';
 import GroupService, { Group, GroupWithChildren } from '../services/GroupService';
 import PasswordService, { PasswordItem, PasswordHistory } from '../services/PasswordService';
 import SettingsService, { UserSetting, UserSettingsCategory } from '../services/SettingsService';
@@ -30,7 +31,7 @@ export class DatabaseService {
   }
 
   private initializeDatabase(): void {
-    const dbPath = path.join(process.cwd(), 'passwords.db');
+    const dbPath = path.join(app.getPath('userData'), 'passwords.db');
     
     try {
       this.db = new Database(dbPath);

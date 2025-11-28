@@ -1,12 +1,15 @@
 import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import * as path from 'path';
 import DatabaseService from './database/DatabaseService';
+import { initLogger, getLogFilePath } from './logger';
 
 class PasswordManagerApp {
   private mainWindow: BrowserWindow | null = null;
   private databaseService: DatabaseService | null = null;
 
   constructor() {
+    initLogger();
+    console.info('app starting');
     this.init();
   }
 
@@ -19,8 +22,10 @@ class PasswordManagerApp {
     // 当 Electron 完成初始化并准备创建浏览器窗口时调用此方法
     app.whenReady().then(async () => {
       try {
+        console.info('app ready');
         // 初始化数据库服务
         this.databaseService = new DatabaseService();
+        console.info('database initialized at', getLogFilePath());
         
         // 设置IPC处理器
         this.setupIpcHandlers();
@@ -33,6 +38,7 @@ class PasswordManagerApp {
         
         // 创建主窗口
         this.createMainWindow();
+        console.info('main window created');
       } catch (error) {
         console.error('Failed to initialize app:', error);
         app.quit();
@@ -95,11 +101,13 @@ class PasswordManagerApp {
         this.mainWindow?.setMenuBarVisibility(false);
       }
       this.mainWindow?.show();
+      console.info('window ready-to-show');
     });
 
     // 当窗口关闭时清理
     this.mainWindow.on('closed', () => {
       this.mainWindow = null;
+      console.info('main window closed');
     });
   }
 
