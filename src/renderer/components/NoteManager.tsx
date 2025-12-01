@@ -20,7 +20,7 @@ interface NoteRecord {
   updated_at?: string;
 }
 
-const NoteManager: React.FC<{ onClose: () => void; selectedGroupId?: number; externalGroups?: NoteGroup[]; hideTopFilter?: boolean; createSignal?: number; openNoteId?: number; openSignal?: number; createTemplate?: string; templateSignal?: number }> = ({ onClose, selectedGroupId: selectedGroupIdProp, externalGroups, hideTopFilter, createSignal, openNoteId, openSignal, createTemplate, templateSignal }) => {
+const NoteManager: React.FC<{ onClose: () => void; selectedGroupId?: number; externalGroups?: NoteGroup[]; hideTopFilter?: boolean; createSignal?: number; openNoteId?: number; openSignal?: number; createTemplate?: string; templateSignal?: number }> = ({ onClose: _onClose, selectedGroupId: selectedGroupIdProp, externalGroups, hideTopFilter, createSignal, openNoteId, openSignal, createTemplate, templateSignal }) => {
   const [groups, setGroups] = useState<NoteGroup[]>(externalGroups || []);
   const [notes, setNotes] = useState<NoteRecord[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<number | undefined>(selectedGroupIdProp);
@@ -194,13 +194,13 @@ const NoteManager: React.FC<{ onClose: () => void; selectedGroupId?: number; ext
       )}
       <Table columns={columns as any} dataSource={notes} rowKey="id" loading={loading} pagination={{ pageSize: 10 }} />
 
-      <Modal title={editingNote ? '编辑便笺' : '新建便笺'} open={editVisible} onCancel={() => setEditVisible(false)} footer={null}>
+      <Modal title={editingNote ? '编辑便笺' : '新建便笺'} open={editVisible} onCancel={() => setEditVisible(false)} footer={null} width={900}>
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item name="title" label="标题">
             <Input placeholder="标题" ref={titleInputRef} />
           </Form.Item>
-          <Form.Item name="content_ciphertext" label="正文" rules={[{ required: true, message: '请输入正文' }]}>
-            <Input.TextArea rows={8} placeholder="自由文本" />
+          <Form.Item name="content_ciphertext" label="正文" rules={[{ required: true, message: '请输入正文' }]}> 
+            <Input.TextArea placeholder="自由文本" autoSize={{ minRows: 12, maxRows: 32 }} />
           </Form.Item>
           <Form.Item name="group_id" label="分组" rules={[{ required: true, message: '请选择分组' }]}> 
             <Select allowClear placeholder="选择分组">
@@ -259,9 +259,6 @@ const NoteManager: React.FC<{ onClose: () => void; selectedGroupId?: number; ext
           })}
         </div>
       </Modal>
-      <Space style={{ marginTop: 12 }}>
-        <Button onClick={onClose}>关闭</Button>
-      </Space>
     </div>
   );
 };

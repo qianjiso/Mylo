@@ -322,12 +322,13 @@ class PasswordManagerApp {
 
     // 导出数据
     ipcMain.handle('export-data', async (_, options: {
-      format: 'json' | 'csv' | 'encrypted_zip';
+      format: 'json' | 'encrypted_zip';
       includeHistory: boolean;
       includeGroups: boolean;
       includeSettings: boolean;
       passwordStrength: 'weak' | 'medium' | 'strong';
       compressionLevel: number;
+      archivePassword?: string;
     }) => {
       try {
         const data = await this.databaseService!.exportData(options);
@@ -339,10 +340,11 @@ class PasswordManagerApp {
 
     // 导入数据
     ipcMain.handle('import-data', async (_, data: number[], options: {
-      format: 'json' | 'csv';
+      format: 'json' | 'csv' | 'encrypted_zip';
       mergeStrategy: 'replace' | 'merge' | 'skip';
       validateIntegrity: boolean;
       dryRun: boolean;
+      archivePassword?: string;
     }) => {
       try {
         const uint8Array = new Uint8Array(data);

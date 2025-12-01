@@ -600,7 +600,17 @@ const App: React.FC = () => {
               type="link"
               size="small"
               icon={isVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
-              onClick={() => togglePasswordVisibility(record.id.toString())}
+              onClick={async () => {
+                togglePasswordVisibility(record.id.toString());
+                try {
+                  if (record.password) {
+                    await navigator.clipboard.writeText(record.password);
+                    message.success('密码已复制');
+                  }
+                } catch {
+                  message.error('复制失败');
+                }
+              }}
             />
           </Space>
         );

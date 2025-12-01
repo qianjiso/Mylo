@@ -778,12 +778,13 @@ export class DatabaseService {
 
   // 导入导出功能
   public exportData(options: {
-    format: 'json' | 'csv' | 'encrypted_zip';
+    format: 'json' | 'encrypted_zip';
     includeHistory: boolean;
     includeGroups: boolean;
     includeSettings: boolean;
     passwordStrength: 'weak' | 'medium' | 'strong';
     compressionLevel: number;
+    archivePassword?: string;
   }): Promise<Uint8Array> {
     return new Promise(async (resolve, reject) => {
       try {
@@ -831,12 +832,11 @@ export class DatabaseService {
             result = new TextEncoder().encode(jsonString);
             break;
 
-          case 'csv':
-            result = this.exportToCSV(exportData.passwords);
-            break;
-
           case 'encrypted_zip':
-            result = await this.createEncryptedZip(exportData, options.passwordStrength);
+            if (!options.archivePassword || options.archivePassword.length < 4) {
+              throw new Error('请为加密备份包设置至少4位的密码');
+            }
+            result = await this.createEncryptedZip(exportData, options.archivePassword, options.passwordStrength);
             break;
 
           default:
@@ -850,6 +850,7 @@ export class DatabaseService {
     });
   }
 
+  // 保留CSV工具但不对外导出
   private exportToCSV(passwords: any[]): Uint8Array {
     const headers = ['title', 'username', 'password', 'url', 'notes', 'group_name', 'created_at', 'updated_at'];
     const csvRows = [headers.join(',')];
@@ -872,37 +873,45 @@ export class DatabaseService {
     return new TextEncoder().encode(csvString);
   }
 
-  private escapeCSVField(field: string): string {
-    if (field.includes(',') || field.includes('"') || field.includes('\n')) {
-      return `"${field.replace(/"/g, '""')}"`;
+  private escapeCSVField(field: any): string {
+    const s = field == null ? '' : String(field);
+    if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+      return `"${s.replace(/"/g, '""')}"`;
     }
-    return field;
+    return s;
   }
 
-  private async createEncryptedZip(data: any, passwordStrength: 'weak' | 'medium' | 'strong'): Promise<Uint8Array> {
-    // 这里需要实现ZIP创建和加密
-    // 简化实现：返回JSON的加密版本
+  private async createEncryptedZip(data: any, archivePassword: string, passwordStrength: 'weak' | 'medium' | 'strong'): Promise<Uint8Array> {
     const jsonString = JSON.stringify(data);
-    const encrypted = this.encrypt(jsonString);
-    
-    // 创建一个简单的加密文件格式
-    const metadata = JSON.stringify({
+    const nodeCrypto = await import('crypto');
+    const salt = nodeCrypto.randomBytes(16);
+    const key = nodeCrypto.pbkdf2Sync(archivePassword, salt, 10000, 32, 'sha256');
+    const iv = nodeCrypto.randomBytes(16);
+    const cipher = nodeCrypto.createCipheriv('aes-256-cbc', key, iv);
+    const encryptedBuf = Buffer.concat([cipher.update(Buffer.from(jsonString, 'utf8')), cipher.final()]);
+    const metadata = {
+      format: 'mima-archive',
       version: '1.0',
       created_at: new Date().toISOString(),
       compression: 'none',
       encryption: 'aes-256-cbc',
-      password_strength: passwordStrength
-    });
-
-    const combined = metadata + '\n' + encrypted;
-    return new TextEncoder().encode(combined);
+      password_strength: passwordStrength,
+      salt: salt.toString('hex'),
+      iv: iv.toString('hex')
+    };
+    const metaBuf = Buffer.from(JSON.stringify(metadata), 'utf8');
+    const metaLen = Buffer.alloc(4);
+    metaLen.writeUInt32BE(metaBuf.length, 0);
+    const combined = Buffer.concat([metaLen, metaBuf, encryptedBuf]);
+    return new Uint8Array(combined);
   }
 
   public importData(data: Uint8Array, options: {
-    format: 'json' | 'csv';
+    format: 'json' | 'csv' | 'encrypted_zip';
     mergeStrategy: 'replace' | 'merge' | 'skip';
     validateIntegrity: boolean;
     dryRun: boolean;
+    archivePassword?: string;
   }): Promise<{
     success: boolean;
     imported: number;
@@ -930,6 +939,11 @@ export class DatabaseService {
 
           case 'csv':
             importData = this.parseCSVData(data);
+            break;
+
+          case 'encrypted_zip':
+            if (!options.archivePassword) throw new Error('缺少加密包密码');
+            importData = this.parseEncryptedArchive(data, options.archivePassword);
             break;
 
           default:
@@ -1024,10 +1038,10 @@ export class DatabaseService {
           for (const history of importData.password_history) {
             try {
               // 确保密码已加密
-              if (!history.old_password.includes(':')) {
+              if (history.old_password && !String(history.old_password).includes(':')) {
                 history.old_password = this.encrypt(history.old_password);
               }
-              if (!history.new_password.includes(':')) {
+              if (history.new_password && !String(history.new_password).includes(':')) {
                 history.new_password = this.encrypt(history.new_password);
               }
               this.addPasswordHistory(history);

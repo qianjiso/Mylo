@@ -130,19 +130,21 @@ export interface ElectronAPI {
 
   // 文件操作
   exportData: (options: {
-    format: 'json' | 'csv' | 'encrypted_zip';
+    format: 'json' | 'encrypted_zip';
     includeHistory: boolean;
     includeGroups: boolean;
     includeSettings: boolean;
     passwordStrength: 'weak' | 'medium' | 'strong';
     compressionLevel: number;
+    archivePassword?: string;
   }) => Promise<{ success: boolean; data?: number[]; error?: string }>;
   
   importData: (data: number[], options: {
-    format: 'json' | 'csv';
+    format: 'json' | 'csv' | 'encrypted_zip';
     mergeStrategy: 'replace' | 'merge' | 'skip';
     validateIntegrity: boolean;
     dryRun: boolean;
+    archivePassword?: string;
   }) => Promise<{ success: boolean; data?: any; error?: string }>;
 
   getNoteGroups(): Promise<any[]>;

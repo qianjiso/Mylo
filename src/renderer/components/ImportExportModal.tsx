@@ -5,6 +5,7 @@ import {
   Select,
   Switch,
   InputNumber,
+  Input,
   Button,
   Space,
   Typography,
@@ -18,7 +19,6 @@ import {
   DownloadOutlined,
   UploadOutlined,
   FileTextOutlined,
-  FileExcelOutlined,
   LockOutlined,
   InboxOutlined,
 } from '@ant-design/icons';
@@ -54,15 +54,13 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
         // 创建下载链接
         const uint8Array = new Uint8Array(result.data);
         const blob = new Blob([uint8Array], { 
-          type: values.format === 'json' ? 'application/json' : 
-                values.format === 'csv' ? 'text/csv' : 
-                'application/zip' 
+          type: values.format === 'json' ? 'application/json' : 'application/octet-stream'
         });
         
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `passwords_backup_${new Date().toISOString().split('T')[0]}.${values.format === 'csv' ? 'csv' : values.format === 'json' ? 'json' : 'zip'}`;
+        link.download = `passwords_backup_${new Date().toISOString().split('T')[0]}.${values.format === 'json' ? 'json' : 'mima'}`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -117,7 +115,7 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
 
   // 文件上传配置
   const uploadProps = {
-    accept: '.json,.csv,.zip',
+    accept: '.json,.csv,.mima',
     maxCount: 1,
     beforeUpload: (file: File) => {
       setUploadFile(file);
@@ -193,19 +191,29 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
                   JSON格式（完整数据结构）
                 </Space>
               </Option>
-              <Option value="csv">
-                <Space>
-                  <FileExcelOutlined />
-                  CSV格式（仅密码条目）
-                </Space>
-              </Option>
               <Option value="encrypted_zip">
                 <Space>
                   <LockOutlined />
-                  加密压缩包（AES-256加密）
+                  加密备份包（AES-256加密，后缀 .mima）
                 </Space>
               </Option>
             </Select>
+          </Form.Item>
+
+          {/* 导出密码 */}
+          <Form.Item
+            noStyle
+            shouldUpdate={(prev, cur) => prev.format !== cur.format}
+          >
+            {({ getFieldValue }) => getFieldValue('format') === 'encrypted_zip' ? (
+              <Form.Item
+                label="备份包密码"
+                name="archivePassword"
+                rules={[{ required: true, message: '请设置备份包密码' }, { min: 4, message: '至少4位' }]}
+              >
+                <Input.Password style={{ width: '100%' }} placeholder="请输入密码" />
+              </Form.Item>
+            ) : null}
           </Form.Item>
 
           <Divider>导出内容</Divider>
@@ -275,7 +283,7 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
               </p>
               <p className="ant-upload-text">点击或拖拽文件到此区域上传</p>
               <p className="ant-upload-hint">
-                支持 JSON、CSV 和加密 ZIP 格式
+                支持 JSON、CSV 和加密备份包（.mima）格式
               </p>
             </Dragger>
           </Form.Item>
@@ -296,7 +304,23 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
             <Select>
               <Option value="json">JSON格式</Option>
               <Option value="csv">CSV格式</Option>
+              <Option value="encrypted_zip">加密备份包（.mima）</Option>
             </Select>
+          </Form.Item>
+
+          <Form.Item
+            noStyle
+            shouldUpdate={(prev, cur) => prev.format !== cur.format}
+          >
+            {({ getFieldValue }) => getFieldValue('format') === 'encrypted_zip' ? (
+              <Form.Item
+                label="备份包密码"
+                name="archivePassword"
+                rules={[{ required: true, message: '请输入备份包密码' }]}
+              >
+                <Input.Password style={{ width: '100%' }} placeholder="请输入密码" />
+              </Form.Item>
+            ) : null}
           </Form.Item>
 
           <Divider>导入选项</Divider>
