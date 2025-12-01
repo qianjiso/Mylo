@@ -199,6 +199,9 @@ export class SettingsService {
     return [
       { key: 'security.auto_lock_timeout', value: '300', type: 'number', category: 'security', description: '自动锁定时间（秒）' },
       { key: 'security.password_generator_length', value: '16', type: 'number', category: 'security', description: '密码生成器默认长度' },
+      { key: 'security.password_generator_include_uppercase', value: 'true', type: 'boolean', category: 'security', description: '密码生成器包含大写字母' },
+      { key: 'security.password_generator_include_lowercase', value: 'true', type: 'boolean', category: 'security', description: '密码生成器包含小写字母' },
+      { key: 'security.password_generator_include_numbers', value: 'true', type: 'boolean', category: 'security', description: '密码生成器包含数字' },
       { key: 'security.password_generator_include_symbols', value: 'true', type: 'boolean', category: 'security', description: '密码生成器包含特殊字符' },
       { key: 'security.clipboard_clear_timeout', value: '30', type: 'number', category: 'security', description: '剪贴板自动清除时间（秒）' },
       { key: 'ui.theme', value: 'light', type: 'string', category: 'ui', description: '界面主题（light/dark/auto）' },

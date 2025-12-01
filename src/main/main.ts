@@ -72,6 +72,7 @@ class PasswordManagerApp {
   private createMainWindow(): void {
     // 创建浏览器窗口
     this.mainWindow = new BrowserWindow({
+      title: 'Mylo',
       width: 1200,
       height: 800,
       minWidth: 800,
@@ -81,7 +82,7 @@ class PasswordManagerApp {
         contextIsolation: true,
         preload: path.join(__dirname, 'preload.js')
       },
-      titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+      titleBarStyle: 'default',
       show: false, // 先不显示，等加载完成后再显示
       autoHideMenuBar: process.platform !== 'darwin'
     });
@@ -276,15 +277,29 @@ class PasswordManagerApp {
     });
     
 
-    // 生成密码
+    // 生成密码（支持用户设置默认值）
     ipcMain.handle('generate-password', async (_, options) => {
-      const length = options.length || 16;
+      const lenSetting = this.databaseService!.getUserSettingByKey('security.password_generator_length');
+      const upSetting = this.databaseService!.getUserSettingByKey('security.password_generator_include_uppercase');
+      const lowSetting = this.databaseService!.getUserSettingByKey('security.password_generator_include_lowercase');
+      const numSetting = this.databaseService!.getUserSettingByKey('security.password_generator_include_numbers');
+      const symSetting = this.databaseService!.getUserSettingByKey('security.password_generator_include_symbols');
+      const defaultLength = lenSetting ? Number(lenSetting.value) || 16 : 16;
+      const defaultIncludeUppercase = upSetting ? upSetting.value === 'true' : true;
+      const defaultIncludeLowercase = lowSetting ? lowSetting.value === 'true' : true;
+      const defaultIncludeNumbers = numSetting ? numSetting.value === 'true' : true;
+      const defaultIncludeSymbols = symSetting ? symSetting.value === 'true' : true;
+      const length = typeof options.length === 'number' ? options.length : defaultLength;
       let charset = '';
+      const includeUppercase = typeof options.includeUppercase === 'boolean' ? options.includeUppercase : defaultIncludeUppercase;
+      const includeLowercase = typeof options.includeLowercase === 'boolean' ? options.includeLowercase : defaultIncludeLowercase;
+      const includeNumbers = typeof options.includeNumbers === 'boolean' ? options.includeNumbers : defaultIncludeNumbers;
+      const includeSymbols = typeof options.includeSymbols === 'boolean' ? options.includeSymbols : defaultIncludeSymbols;
       
-      if (options.includeUppercase) charset += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-      if (options.includeLowercase) charset += 'abcdefghijklmnopqrstuvwxyz';
-      if (options.includeNumbers) charset += '0123456789';
-      if (options.includeSymbols) charset += '!@#$%^&*()_+-=[]{}|;:,.<>?';
+      if (includeUppercase) charset += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      if (includeLowercase) charset += 'abcdefghijklmnopqrstuvwxyz';
+      if (includeNumbers) charset += '0123456789';
+      if (includeSymbols) charset += '!@#$%^&*()_+-=[]{}|;:,.<>?';
       
       if (!charset) charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
       

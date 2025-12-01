@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Modal, Form, InputNumber, Switch, Button, Input, message } from 'antd';
 
 interface PasswordGeneratorProps {
@@ -15,6 +15,34 @@ const PasswordGenerator: React.FC<PasswordGeneratorProps> = ({
   const [form] = Form.useForm();
   const [generatedPassword, setGeneratedPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const loadDefaults = async () => {
+      try {
+        if (!visible) return;
+        const lenSetting = await window.electronAPI.getUserSetting?.('security.password_generator_length');
+        const upSetting = await window.electronAPI.getUserSetting?.('security.password_generator_include_uppercase');
+        const lowSetting = await window.electronAPI.getUserSetting?.('security.password_generator_include_lowercase');
+        const numSetting = await window.electronAPI.getUserSetting?.('security.password_generator_include_numbers');
+        const symSetting = await window.electronAPI.getUserSetting?.('security.password_generator_include_symbols');
+        const length = parseInt(String(lenSetting?.value ?? '16'), 10) || 16;
+        const includeUppercase = String(upSetting?.value ?? 'true') === 'true';
+        const includeLowercase = String(lowSetting?.value ?? 'true') === 'true';
+        const includeNumbers = String(numSetting?.value ?? 'true') === 'true';
+        const includeSymbols = String(symSetting?.value ?? 'true') === 'true';
+        form.setFieldsValue({
+          length,
+          includeUppercase,
+          includeLowercase,
+          includeNumbers,
+          includeSymbols,
+        });
+      } catch {
+        // ignore
+      }
+    };
+    loadDefaults();
+  }, [visible, form]);
 
   const generatePassword = async (values: {
     length?: number;

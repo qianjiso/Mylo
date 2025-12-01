@@ -706,10 +706,32 @@ const App: React.FC = () => {
       render: (text: string) => formatTimestamp(text),
     },
     {
-      title: '更改原因',
-      dataIndex: 'changed_reason',
-      key: 'changed_reason',
-      render: (text: string) => text || '-',
+      title: '操作',
+      key: 'action',
+      render: (_: any, record) => {
+        const oldKey = `old-${record.id}`;
+        const newKey = `new-${record.id}`;
+        const oldVisible = visibleHistoryPasswords.has(oldKey);
+        const newVisible = visibleHistoryPasswords.has(newKey);
+        const rowVisible = oldVisible && newVisible;
+        return (
+          <Button
+            type="link"
+            size="small"
+            icon={rowVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+            onClick={() => {
+              setVisibleHistoryPasswords(prev => {
+                const s = new Set(prev);
+                if (rowVisible) { s.delete(oldKey); s.delete(newKey); }
+                else { s.add(oldKey); s.add(newKey); }
+                return s;
+              });
+            }}
+          >
+            {rowVisible ? '隐藏' : '查看'}
+          </Button>
+        );
+      }
     },
   ];
 

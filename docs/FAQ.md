@@ -56,3 +56,20 @@ npx electron-builder install-app-deps
 - 或在 ~/Library/Logs/DiagnosticReports/ 查找 Mylo_*.crash
 ## 2.应用日志
 - 应用启动日志写入 ~/Library/Application Support/Mylo/electron.log
+
+## 8. 应用数据位置（MAC电脑）
+### 数据位置
+1. 用户数据目录： ~/Library/Application Support/Mylo
+    - 数据库文件： ~/Library/Application Support/Mylo/passwords.db
+    - 日志文件： ~/Library/Application Support/Mylo/electron.log
+    - 其他设置文件也会在此目录（如 electron-store ）
+2. 可能的偏好和状态文件：
+    - ~/Library/Preferences/com.yourcompany.mylo.plist
+    - ~/Library/Saved Application State/com.yourcompany.mylo.savedState
+    - ~/Library/Caches/Mylo
+### 手动清除
+1. 关闭应用后执行以下命令清理所有本地数据：
+    - 删除用户数据目录： rm -rf ~/Library/Application\ Support/Mylo
+    - 删除偏好设置： rm -rf ~/Library/Preferences/com.yourcompany.mylo.plist
+    - 删除缓存： rm -rf ~/Library/Caches/Mylo
+    - 删除保存的会话状态： rm -rf ~/Library/Saved\ Application\ State/com.yourcompany.mylo.savedState

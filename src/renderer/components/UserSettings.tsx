@@ -77,37 +77,16 @@ useEffect(() => {
   const handleReset = async () => {
     try {
       setLoading(true);
-      
-      // 重置为默认值
-      const defaultSettings = {
-        // 安全设置
-        autoLockTime: 5,
-        requireMasterPassword: true,
-        passwordGeneratorLength: 16,
-        passwordGeneratorUppercase: true,
-        passwordGeneratorLowercase: true,
-        passwordGeneratorNumbers: true,
-        passwordGeneratorSymbols: true,
-        
-        // UI设置
-        theme: 'light',
-        language: 'zh-CN',
-        showPasswordStrength: true,
-        autoSave: true,
-        
-        // 其他设置
-        exportFormat: 'json',
-        backupEnabled: true,
-        clipboardClearTime: 30
-      };
-      
-      form.setFieldsValue(defaultSettings);
-      
-      // 保存默认设置
-      for (const [key, value] of Object.entries(defaultSettings)) {
-        await window.electronAPI.setUserSetting(key, String(value));
-      }
-      
+      const res = await window.electronAPI.resetAllSettingsToDefault();
+      if (!res.success) throw new Error(res.error || '重置失败');
+      const settingsData = await window.electronAPI.getUserSettings();
+      const formData: Record<string, any> = {};
+      settingsData.forEach((setting: UserSetting) => {
+        if (setting.type === 'boolean') formData[setting.key] = setting.value === 'true';
+        else if (setting.type === 'number') formData[setting.key] = Number(setting.value);
+        else formData[setting.key] = setting.value;
+      });
+      form.setFieldsValue(formData);
       message.success('已重置为默认设置');
     } catch (error) {
       console.error('重置设置失败:', error);
@@ -161,7 +140,7 @@ useEffect(() => {
             <Col span={12}>
               <Form.Item
                 label="默认密码长度"
-                name="passwordGeneratorLength"
+                name="security.password_generator_length"
               >
                 <InputNumber
                   min={4}
@@ -174,7 +153,7 @@ useEffect(() => {
             <Col span={12}>
               <Form.Item
                 label="包含大写字母"
-                name="passwordGeneratorUppercase"
+                name="security.password_generator_include_uppercase"
                 valuePropName="checked"
               >
                 <Switch />
@@ -186,7 +165,7 @@ useEffect(() => {
             <Col span={12}>
               <Form.Item
                 label="包含小写字母"
-                name="passwordGeneratorLowercase"
+                name="security.password_generator_include_lowercase"
                 valuePropName="checked"
               >
                 <Switch />
@@ -195,7 +174,7 @@ useEffect(() => {
             <Col span={12}>
               <Form.Item
                 label="包含数字"
-                name="passwordGeneratorNumbers"
+                name="security.password_generator_include_numbers"
                 valuePropName="checked"
               >
                 <Switch />
@@ -207,7 +186,7 @@ useEffect(() => {
             <Col span={12}>
               <Form.Item
                 label="包含特殊字符"
-                name="passwordGeneratorSymbols"
+                name="security.password_generator_include_symbols"
                 valuePropName="checked"
               >
                 <Switch />
