@@ -10,6 +10,8 @@ import archiver from 'archiver';
 import zipEncrypted from 'archiver-zip-encrypted';
 import { PassThrough } from 'stream';
 import StreamZip from 'node-stream-zip';
+import * as fs from 'fs';
+import * as os from 'os';
 
 // 类型定义由模块服务导出，保持单一来源
 
@@ -856,14 +858,11 @@ export class DatabaseService {
             if (!options.archivePassword || options.archivePassword.length < 4) {
               throw new Error('请为加密备份包设置至少4位的密码');
             }
-            result = await this.createEncryptedZip(exportData, options.archivePassword);
+            result = await this.createZipArchive(exportData, options.archivePassword);
             break;
 
           case 'zip':
-            if (!options.archivePassword || options.archivePassword.length < 4) {
-              throw new Error('请为压缩包设置至少4位的密码');
-            }
-            result = await this.createStandardZip(exportData, options.archivePassword);
+            result = await this.createZipArchive(exportData, undefined);
             break;
 
           default:
@@ -908,33 +907,13 @@ export class DatabaseService {
     return s;
   }
 
-  private async createEncryptedZip(data: any, archivePassword: string): Promise<Uint8Array> {
-    const jsonString = JSON.stringify(data);
-    const nodeCrypto = await import('crypto');
-    const salt = nodeCrypto.randomBytes(16);
-    const key = nodeCrypto.pbkdf2Sync(archivePassword, salt, 10000, 32, 'sha256');
-    const iv = nodeCrypto.randomBytes(16);
-    const cipher = nodeCrypto.createCipheriv('aes-256-cbc', key, iv);
-    const encryptedBuf = Buffer.concat([cipher.update(Buffer.from(jsonString, 'utf8')), cipher.final()]);
-    const metadata = {
-      format: 'mima-archive',
-      version: '1.0',
-      created_at: new Date().toISOString(),
-      compression: 'none',
-      encryption: 'aes-256-cbc',
-      salt: salt.toString('hex'),
-      iv: iv.toString('hex')
-    };
-    const metaBuf = Buffer.from(JSON.stringify(metadata), 'utf8');
-    const metaLen = Buffer.alloc(4);
-    metaLen.writeUInt32BE(metaBuf.length, 0);
-    const combined = Buffer.concat([metaLen, metaBuf, encryptedBuf]);
-    return new Uint8Array(combined);
-  }
-
-  private async createStandardZip(data: any, archivePassword: string): Promise<Uint8Array> {
-    archiver.registerFormat('zip-encrypted', zipEncrypted as any);
-    const archive = archiver.create('zip-encrypted', { zlib: { level: 6 }, encryptionMethod: 'zip20', password: archivePassword });
+  private async createZipArchive(data: any, archivePassword?: string): Promise<Uint8Array> {
+    if (archivePassword) {
+      archiver.registerFormat('zip-encrypted', zipEncrypted as any);
+    }
+    const archive = archivePassword
+      ? archiver.create('zip-encrypted', { zlib: { level: 6 }, encryptionMethod: 'zip20', password: archivePassword })
+      : archiver.create('zip', { zlib: { level: 6 } });
     const out = new PassThrough();
     const chunks: Buffer[] = [];
     out.on('data', (d: Buffer) => chunks.push(d));
@@ -949,8 +928,11 @@ export class DatabaseService {
     archive.append(Buffer.from(JSON.stringify({ exported_at: new Date().toISOString() }, null, 2), 'utf8'), { name: 'meta.json' });
 
     await archive.finalize();
-    // 等待输出流完成
-    await new Promise<void>((resolve) => out.on('close', () => resolve()));
+    // 使用 Node 的 finished 保证回调一次
+    const streamMod = await import('stream');
+    await new Promise<void>((resolve, reject) => {
+      (streamMod as any).finished(out, (err: any) => err ? reject(err) : resolve());
+    });
     return new Uint8Array(Buffer.concat(chunks));
   }
 
@@ -990,12 +972,11 @@ export class DatabaseService {
 
           case 'encrypted_zip':
             if (!options.archivePassword) throw new Error('缺少加密包密码');
-            importData = await this.parseEncryptedArchive(data, options.archivePassword);
+            importData = await this.parseStandardZip(data, options.archivePassword);
             console.info('importData:parsed encrypted_zip');
             break;
 
           case 'zip':
-            if (!options.archivePassword) throw new Error('缺少压缩包密码');
             importData = await this.parseStandardZip(data, options.archivePassword);
             console.info('importData:parsed zip');
             break;
@@ -1229,36 +1210,33 @@ export class DatabaseService {
     });
   }
 
-  private async parseStandardZip(data: Uint8Array, archivePassword: string): Promise<any> {
-    const zip = new (StreamZip as any).async({ buffer: Buffer.from(data), password: archivePassword });
+  private async parseStandardZip(data: Uint8Array, archivePassword?: string): Promise<any> {
+    const tmpDir = os.tmpdir();
+    const tmpFile = path.join(tmpDir, `mylo_import_${Date.now()}_${Math.random().toString(16).slice(2)}.zip`);
+    await fs.promises.writeFile(tmpFile, Buffer.from(data));
+    const options: any = { file: tmpFile };
+    if (archivePassword && archivePassword.length > 0) options.password = archivePassword;
+    const zip = new (StreamZip as any).async(options);
     try {
       const entries = await zip.entries();
       const names = Object.keys(entries);
-      const chosen: string | undefined = names.find((n: string) => n.endsWith('backup.json'));
+      const chosen: string | undefined = names.find((n: string) => n.endsWith('backup.json')) || names.find((n: string) => n.toLowerCase().endsWith('.json'));
       if (!chosen) throw new Error('压缩包中未找到可识别的数据文件');
-      const buf: Buffer = await zip.entryData(chosen);
-      return JSON.parse(buf.toString('utf8'));
+      try {
+        const buf: Buffer = await zip.entryData(chosen);
+        return JSON.parse(buf.toString('utf8'));
+      } catch (err: any) {
+        if (String(err?.message || err).includes('Entry encrypted')) {
+          throw new Error('压缩包条目已加密，请提供正确的备份密码');
+        }
+        throw err;
+      }
     } finally {
       await zip.close();
+      try { await fs.promises.unlink(tmpFile); } catch (e) { void e; }
     }
   }
 
-  private async parseEncryptedArchive(data: Uint8Array, archivePassword: string): Promise<any> {
-    const nodeCrypto = await import('crypto');
-    const buf = Buffer.from(data);
-    if (buf.length < 4) throw new Error('加密包格式错误');
-    const metaLen = buf.readUInt32BE(0);
-    const metaBuf = buf.slice(4, 4 + metaLen);
-    const encBuf = buf.slice(4 + metaLen);
-    const meta = JSON.parse(metaBuf.toString('utf8'));
-    if (meta.format !== 'mima-archive') throw new Error('不支持的加密包格式');
-    const salt = Buffer.from(meta.salt, 'hex');
-    const iv = Buffer.from(meta.iv, 'hex');
-    const key = nodeCrypto.pbkdf2Sync(archivePassword, salt, 10000, 32, 'sha256');
-    const decipher = nodeCrypto.createDecipheriv('aes-256-cbc', key, iv);
-    const decrypted = Buffer.concat([decipher.update(encBuf), decipher.final()]).toString('utf8');
-    return JSON.parse(decrypted);
-  }
 
   private parseCSVData(data: Uint8Array): any {
     const csvString = new TextDecoder().decode(data);

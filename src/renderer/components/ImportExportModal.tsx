@@ -34,6 +34,7 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
   const [loading, setLoading] = useState(false);
   // 预览已取消
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [archivePwd, setArchivePwd] = useState('');
   
 
   // 导出数据
@@ -54,7 +55,7 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `passwords_backup_${new Date().toISOString().split('T')[0]}.${values.format === 'json' ? 'json' : 'mima'}`;
+        link.download = `passwords_backup_${new Date().toISOString().split('T')[0]}.${values.format === 'json' ? 'json' : 'zip'}`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -81,18 +82,24 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
 
     try {
       setLoading(true);
-      const values = await importForm.validateFields();
-      
+      const inferredFormat = uploadFile.name.toLowerCase().endsWith('.zip') ? 'encrypted_zip' : 'json';
+      const fmt = (importForm.getFieldValue('format') as 'json' | 'encrypted_zip') || inferredFormat;
+      const pwd = archivePwd;
+      if (fmt === 'encrypted_zip' && (!pwd || String(pwd).length < 4)) {
+        message.error('请输入至少4位备份包密码');
+        return;
+      }
+
       // 读取文件内容
       const arrayBuffer = await uploadFile.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
       
       const result = await window.electronAPI.importData(Array.from(uint8Array), {
-        format: values.format,
+        format: fmt,
         mergeStrategy: 'merge',
         validateIntegrity: false,
         dryRun: false,
-        archivePassword: values.archivePassword
+        archivePassword: pwd
       });
       
       if (result.success) {
@@ -110,15 +117,13 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
 
   // 文件上传配置
   const uploadProps = {
-    accept: '.json,.mima,.zip',
+    accept: '.json,.zip',
     maxCount: 1,
     beforeUpload: (file: File) => {
       setUploadFile(file);
       const name = file.name.toLowerCase();
-      let fmt: 'json' | 'csv' | 'encrypted_zip' | 'zip' = 'json';
-      if (name.endsWith('.mima')) fmt = 'encrypted_zip';
-      else if (name.endsWith('.zip')) fmt = 'zip';
-      else if (name.endsWith('.csv')) fmt = 'csv';
+      let fmt: 'json' | 'encrypted_zip' = 'json';
+      if (name.endsWith('.zip')) fmt = 'encrypted_zip';
       else fmt = 'json';
       importForm.setFieldsValue({ format: fmt });
       return false; // 阻止自动上传
@@ -126,6 +131,7 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
     onRemove: () => {
       setUploadFile(null);
       importForm.setFieldsValue({ format: 'json' });
+      setArchivePwd('');
     },
   };
 
@@ -184,13 +190,7 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
               <Option value="encrypted_zip">
                 <Space>
                   <LockOutlined />
-                  加密备份包（AES-256加密，后缀 .mima）
-                </Space>
-              </Option>
-              <Option value="zip">
-                <Space>
-                  <LockOutlined />
-                  标准ZIP（密码保护，内含可读数据）
+                  加密ZIP（仅包含备份JSON）
                 </Space>
               </Option>
             </Select>
@@ -201,7 +201,7 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
             noStyle
             shouldUpdate={(prev, cur) => prev.format !== cur.format}
           >
-            {({ getFieldValue }) => ['encrypted_zip','zip'].includes(getFieldValue('format')) ? (
+            {({ getFieldValue }) => ['encrypted_zip'].includes(getFieldValue('format')) ? (
               <Form.Item
                 label="备份包密码"
                 name="archivePassword"
@@ -238,7 +238,7 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
               </p>
               <p className="ant-upload-text">点击或拖拽文件到此区域上传</p>
               <p className="ant-upload-hint">
-                支持 JSON、加密备份包（.mima）与密码保护 ZIP（仅含 JSON）
+                支持 JSON 与加密ZIP（仅含 JSON，需密码）
               </p>
             </Dragger>
           </Form.Item>
@@ -252,21 +252,31 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
           >
             <Select>
               <Option value="json">JSON格式</Option>
-              <Option value="csv">CSV格式</Option>
-              <Option value="encrypted_zip">加密备份包（.mima）</Option>
-              <Option value="zip">标准ZIP（密码保护）</Option>
+              <Option value="encrypted_zip">加密ZIP（需密码）</Option>
             </Select>
           </Form.Item>
 
-          {(['encrypted_zip','zip'] as any).includes(importForm.getFieldValue('format')) ? (
-            <Form.Item
-              label="备份包密码"
-              name="archivePassword"
-              rules={[{ required: true, message: '请输入备份包密码' }]}
-            >
-              <Input.Password style={{ width: '100%' }} placeholder="请输入密码" />
-            </Form.Item>
-          ) : null}
+          <Form.Item
+            label="备份包密码"
+            name="archivePassword"
+            hidden={importForm.getFieldValue('format') !== 'encrypted_zip'}
+            preserve
+            rules={[
+              {
+                validator: async (_, value) => {
+                  const fmt = importForm.getFieldValue('format');
+                  if (fmt === 'encrypted_zip') {
+                    if (!value || String(value).length < 4) {
+                      return Promise.reject(new Error('请输入至少4位备份包密码'));
+                    }
+                  }
+                  return Promise.resolve();
+                },
+              },
+            ]}
+          >
+            <Input.Password style={{ width: '100%' }} placeholder="请输入密码" value={archivePwd} onChange={(e) => setArchivePwd(e.target.value)} />
+          </Form.Item>
 
           {/* 导入选项取消，默认智能合并 */}
         </Form>

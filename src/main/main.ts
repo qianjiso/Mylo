@@ -343,9 +343,12 @@ class PasswordManagerApp {
       archivePassword?: string;
     }) => {
       try {
+        console.info('ipc export-data request', { options: { ...options, archivePassword: options.archivePassword ? '***' : undefined } });
         const data = await this.databaseService!.exportData(options);
+        console.info('ipc export-data done', { bytes: data?.length || 0 });
         return { success: true, data: Array.from(data) };
       } catch (error) {
+        console.error('ipc export-data failed', error);
         return { success: false, error: (error as Error).message };
       }
     });
