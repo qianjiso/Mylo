@@ -55,7 +55,6 @@ const PasswordGenerator: React.FC<PasswordGeneratorProps> = ({
     try {
       const password = await window.electronAPI.generatePassword(values);
       setGeneratedPassword(password);
-      message.success('密码生成成功');
     } catch (error) {
       message.error('密码生成失败');
       console.error('Generate password error:', error);

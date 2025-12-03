@@ -62,8 +62,7 @@ export class PasswordService {
     }
   }
 
-  /** 保存密码（新增/更新），校验并记录历史，敏感字段加密存储 */
-  public savePassword(password: PasswordItem): number {
+  public savePasswordFromUI(password: PasswordItem): number {
     this.validatePassword(password);
 
     if (password.group_id) {
@@ -77,23 +76,24 @@ export class PasswordService {
     const encryptedMultiAccounts = password.multi_accounts ? this.crypto.encrypt(password.multi_accounts) : null;
 
     if (password.id) {
-      const oldRow = this.db.prepare('SELECT password, multi_accounts FROM passwords WHERE id = ?').get(password.id) as { password: string; multi_accounts?: string } | undefined;
+      const existing = this.db.prepare('SELECT id, password, multi_accounts FROM passwords WHERE id = ?').get(password.id) as { id: number; password: string; multi_accounts?: string } | undefined;
+      if (!existing) throw new Error('指定的密码不存在');
       const stmt = this.db.prepare(
         `UPDATE passwords SET title = ?, username = ?, password = ?, url = ?, notes = ?, multi_accounts = ?, group_id = ?, updated_at = ? WHERE id = ?`
       );
       stmt.run(
         password.title,
         password.username,
-        encryptedPassword ?? (oldRow ? oldRow.password : null),
+        encryptedPassword ?? existing.password,
         password.url || null,
         password.notes || null,
-        encryptedMultiAccounts ?? (oldRow?.multi_accounts ?? null),
+        encryptedMultiAccounts ?? (existing.multi_accounts ?? null),
         password.group_id || null,
         now,
         password.id
       );
-      if (oldRow && encryptedPassword && oldRow.password !== encryptedPassword) {
-        this.savePasswordHistory(password.id, oldRow.password, encryptedPassword, undefined);
+      if (encryptedPassword && existing.password !== encryptedPassword) {
+        this.savePasswordHistory(password.id, existing.password, encryptedPassword, undefined);
       }
       return password.id;
     } else {
@@ -107,6 +107,71 @@ export class PasswordService {
         password.url || null,
         password.notes || null,
         encryptedMultiAccounts,
+        password.group_id || null,
+        now,
+        now
+      );
+      return result.lastInsertRowid as number;
+    }
+  }
+
+  public savePasswordFromImport(password: PasswordItem): number {
+    this.validatePassword(password);
+
+    if (password.group_id) {
+      const row = this.db.prepare('SELECT id FROM groups WHERE id = ?').get(password.group_id);
+      if (!row) throw new Error('指定的分组不存在');
+    }
+
+    const now = new Date().toISOString();
+
+    if (password.id) {
+      const existing = this.db.prepare('SELECT id FROM passwords WHERE id = ?').get(password.id) as { id: number } | undefined;
+      if (existing) {
+        const stmt = this.db.prepare(
+          `UPDATE passwords SET title = ?, username = ?, password = ?, url = ?, notes = ?, multi_accounts = ?, group_id = ?, updated_at = ? WHERE id = ?`
+        );
+        stmt.run(
+          password.title,
+          password.username,
+          password.password ?? null,
+          password.url || null,
+          password.notes || null,
+          password.multi_accounts ?? null,
+          password.group_id || null,
+          now,
+          password.id
+        );
+        return password.id;
+      } else {
+        const stmt = this.db.prepare(
+          `INSERT INTO passwords (id, title, username, password, url, notes, multi_accounts, group_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        );
+        const result = stmt.run(
+          password.id,
+          password.title,
+          password.username,
+          password.password ?? null,
+          password.url || null,
+          password.notes || null,
+          password.multi_accounts ?? null,
+          password.group_id || null,
+          now,
+          now
+        );
+        return result.lastInsertRowid as number;
+      }
+    } else {
+      const stmt = this.db.prepare(
+        `INSERT INTO passwords (title, username, password, url, notes, multi_accounts, group_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      );
+      const result = stmt.run(
+        password.title,
+        password.username,
+        password.password ?? null,
+        password.url || null,
+        password.notes || null,
+        password.multi_accounts ?? null,
         password.group_id || null,
         now,
         now

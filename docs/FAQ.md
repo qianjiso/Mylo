@@ -11,7 +11,7 @@
 - 在当前沙箱中，npm start 已能正常退出 0；本地有图形界面时应能正确弹出应用窗口。（如仍看到白屏，请先确保执行了 npm run build（构建 renderer），或改用 npm run dev 开发模式启动。）
 
 
-# 2. 运行时日志调试
+# 2. 渲染层日志调试
 - 启动步骤
     - 安装依赖：在项目目录运行 npm install
     - 启动开发服务：开一个终端运行 npm run dev ，等待提示监听在 http://localhost:3000
@@ -23,19 +23,30 @@
 查看日志
     - 切到 DevTools 的 Console 面板
 
-# 3. 正确启动方式
-- 开发模式（含 DevTools）： NODE_ENV=development npm start
+# 3. 主进程调试
+- 构建一次： npm run build
+- 启动调试： npm run start:debug
+- 打开 Chrome，访问 chrome://inspect → 点击 “Open dedicated DevTools for Node”
+- 在 Node DevTools 的 Sources 里直接打开 src/main/database/DatabaseService.ts ，在 1163 行等关键位置设置断点
+- 在应用界面执行导入，主进程会在 TS 源上命中断点
+
+# 4. 正确启动方式
+- 开发模式（含 DevTools）：ELECTRON_OPEN_DEVTOOLS=1 NODE_ENV=development npm start
 - 生产模式（本地文件）：先构建渲染和主进程，再启动
     - 构建： npm run build （等价于依次构建 renderer+main）
     - 启动： npm start
 - 如仅执行了 npm run build:main ，请补充执行渲染构建： npm run build:renderer ，再 npm start
 
-# 4. 本地数据库查询
+# 5. 本地数据库查询
 ```
+cd ~/Library/Application\ Support/Mylo
 sqlite3 passwords.db "select * from passwords"
+sqlite3 passwords.db "select * from groups"
+sqlite3 passwords.db "select * from note_groups"
+sqlite3 passwords.db "select * from notes"
 ```
 
-# 5.代码执行链路
+# 6.代码执行链路
 - 渲染层调用点： src/renderer/App.tsx:216-217 使用 window.electronAPI.addPassword(values)
 - 预加载映射： src/main/preload.ts:151-153
     - addPassword: (password) => ipcRenderer.invoke('add-password', password)
@@ -45,27 +56,27 @@ sqlite3 passwords.db "select * from passwords"
     - public savePassword(password: PasswordItem): number { return this.passwordService.savePassword(password); }
  - 真实保存逻辑： src/main/services/PasswordService.ts:65-116
 
-# 6.首次初始化项目
+# 7.首次初始化项目
 ```shell
 npx electron-builder install-app-deps
 ```
 
-# 7. MAC崩溃定位分析
+# 8. MAC崩溃定位分析
 ## 1.查看系统崩溃报告：
 - 打开 Console.app ，定位到 Crash Reports ，查找 Mylo 的条目
 - 或在 ~/Library/Logs/DiagnosticReports/ 查找 Mylo_*.crash
 ## 2.应用日志
 - 应用启动日志写入 ~/Library/Application Support/Mylo/electron.log
 
-## 8. 应用数据位置（MAC电脑）
+## 9. 应用数据位置（MAC电脑）
 ### 数据位置
-1. 用户数据目录： ~/Library/Application Support/Mylo
-    - 数据库文件： ~/Library/Application Support/Mylo/passwords.db
-    - 日志文件： ~/Library/Application Support/Mylo/electron.log
+1. 用户数据目录： ~/Library/Application\ Support/Mylo
+    - 数据库文件： ~/Library/Application\ Support/Mylo/passwords.db
+    - 日志文件： ~/Library/Application\ Support/Mylo/electron.log
     - 其他设置文件也会在此目录（如 electron-store ）
 2. 可能的偏好和状态文件：
     - ~/Library/Preferences/com.yourcompany.mylo.plist
-    - ~/Library/Saved Application State/com.yourcompany.mylo.savedState
+    - ~/Library/Saved\ Application\ State/com.yourcompany.mylo.savedState
     - ~/Library/Caches/Mylo
 ### 手动清除
 1. 关闭应用后执行以下命令清理所有本地数据：

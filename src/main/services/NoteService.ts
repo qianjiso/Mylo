@@ -55,6 +55,29 @@ export default class NoteService {
     }
   }
 
+  public saveNoteGroupFromImport(group: SecureRecordGroup): number {
+    if (!group.name || group.name.trim().length === 0) throw new Error('分组名称不能为空');
+    const now = new Date().toISOString();
+    if (group.id) {
+      const exists = this.db.prepare('SELECT id FROM secure_record_groups WHERE id = ?').get(group.id) as { id: number } | undefined;
+      if (exists) {
+        const stmt = this.db.prepare('UPDATE secure_record_groups SET name = ?, parent_id = ?, color = ?, sort_order = ?, updated_at = ? WHERE id = ?');
+        stmt.run(group.name, group.parent_id || null, group.color || 'blue', group.sort_order || 0, now, group.id);
+        return group.id;
+      } else {
+        const stmt = this.db.prepare('INSERT INTO secure_record_groups (id, name, parent_id, color, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+        const res = stmt.run(group.id, group.name, group.parent_id || null, group.color || 'blue', group.sort_order || 0, now, now);
+        return res.lastInsertRowid as number;
+      }
+    } else {
+      const row = this.db.prepare('SELECT id FROM secure_record_groups WHERE name = ? AND (parent_id IS ? OR parent_id = ?)').get(group.name, group.parent_id ?? null, group.parent_id ?? null) as { id?: number } | undefined;
+      if (row && row.id) return row.id;
+      const stmt = this.db.prepare('INSERT INTO secure_record_groups (name, parent_id, color, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)');
+      const res = stmt.run(group.name, group.parent_id || null, group.color || 'blue', group.sort_order || 0, now, now);
+      return res.lastInsertRowid as number;
+    }
+  }
+
   public deleteNoteGroup(id: number): boolean {
     const res = this.db.prepare('DELETE FROM secure_record_groups WHERE id = ?').run(id);
     this.db.prepare('UPDATE secure_records SET group_id = NULL WHERE group_id = ?').run(id);
@@ -105,6 +128,28 @@ export default class NoteService {
       const stmt = this.db.prepare('UPDATE secure_records SET title = ?, content_ciphertext = ?, group_id = ?, pinned = ?, archived = ?, updated_at = ? WHERE id = ?');
       stmt.run(note.title || null, enc, note.group_id || null, note.pinned ? 1 : 0, note.archived ? 1 : 0, now, note.id);
       return note.id;
+    } else {
+      const stmt = this.db.prepare('INSERT INTO secure_records (title, content_ciphertext, group_id, pinned, archived, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+      const res = stmt.run(note.title || null, enc, note.group_id || null, note.pinned ? 1 : 0, note.archived ? 1 : 0, now, now);
+      return res.lastInsertRowid as number;
+    }
+  }
+
+  public saveNoteFromImport(note: SecureRecord): number {
+    if (!note.content_ciphertext || String(note.content_ciphertext).trim().length === 0) throw new Error('内容不能为空');
+    const now = new Date().toISOString();
+    const enc = this.crypto.encrypt(note.content_ciphertext);
+    if (note.id) {
+      const exists = this.db.prepare('SELECT id FROM secure_records WHERE id = ?').get(note.id) as { id: number } | undefined;
+      if (exists) {
+        const stmt = this.db.prepare('UPDATE secure_records SET title = ?, content_ciphertext = ?, group_id = ?, pinned = ?, archived = ?, updated_at = ? WHERE id = ?');
+        stmt.run(note.title || null, enc, note.group_id || null, note.pinned ? 1 : 0, note.archived ? 1 : 0, now, note.id);
+        return note.id;
+      } else {
+        const stmt = this.db.prepare('INSERT INTO secure_records (id, title, content_ciphertext, group_id, pinned, archived, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+        const res = stmt.run(note.id, note.title || null, enc, note.group_id || null, note.pinned ? 1 : 0, note.archived ? 1 : 0, now, now);
+        return res.lastInsertRowid as number;
+      }
     } else {
       const stmt = this.db.prepare('INSERT INTO secure_records (title, content_ciphertext, group_id, pinned, archived, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
       const res = stmt.run(note.title || null, enc, note.group_id || null, note.pinned ? 1 : 0, note.archived ? 1 : 0, now, now);

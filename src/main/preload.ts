@@ -130,22 +130,22 @@ export interface ElectronAPI {
 
   // 文件操作
   exportData: (options: {
-    format: 'json' | 'encrypted_zip';
-    includeHistory: boolean;
-    includeGroups: boolean;
-    includeSettings: boolean;
-    passwordStrength: 'weak' | 'medium' | 'strong';
-    compressionLevel: number;
+    format: 'json' | 'encrypted_zip' | 'zip';
+    includeHistory?: boolean;
+    includeGroups?: boolean;
+    includeSettings?: boolean;
     archivePassword?: string;
   }) => Promise<{ success: boolean; data?: number[]; error?: string }>;
   
   importData: (data: number[], options: {
-    format: 'json' | 'csv' | 'encrypted_zip';
+    format: 'json' | 'csv' | 'encrypted_zip' | 'zip';
     mergeStrategy: 'replace' | 'merge' | 'skip';
     validateIntegrity: boolean;
     dryRun: boolean;
     archivePassword?: string;
   }) => Promise<{ success: boolean; data?: any; error?: string }>;
+
+  onDataImported: (handler: (payload: { imported: number; skipped: number }) => void) => void;
 
   getNoteGroups(): Promise<any[]>;
   getNoteGroupTree(parentId?: number): Promise<any[]>;
@@ -235,7 +235,8 @@ const electronAPI: ElectronAPI = {
   addNote: (note) => ipcRenderer.invoke('add-note', note),
   updateNote: (id, note) => ipcRenderer.invoke('update-note', id, note),
   deleteNote: (id) => ipcRenderer.invoke('delete-note', id),
-  searchNotesTitle: (keyword) => ipcRenderer.invoke('search-notes-title', keyword)
+  searchNotesTitle: (keyword) => ipcRenderer.invoke('search-notes-title', keyword),
+  onDataImported: (handler) => { ipcRenderer.on('data-imported', (_e, payload) => handler(payload)); }
 };
 
 // 使用 contextBridge 安全地暴露API

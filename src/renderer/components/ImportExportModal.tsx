@@ -3,17 +3,11 @@ import {
   Modal,
   Form,
   Select,
-  Switch,
-  InputNumber,
   Input,
   Button,
   Space,
-  Typography,
-  Divider,
   Upload,
   message,
-  Radio,
-  Alert,
 } from 'antd';
 import {
   DownloadOutlined,
@@ -23,7 +17,6 @@ import {
   InboxOutlined,
 } from '@ant-design/icons';
 
-const { Title, Text } = Typography;
 const { Option } = Select;
 const { Dragger } = Upload;
 
@@ -39,8 +32,9 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
   const [exportForm] = Form.useForm();
   const [importForm] = Form.useForm();
   const [loading, setLoading] = useState(false);
-  const [importResult, setImportResult] = useState<any>(null);
+  // 预览已取消
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  
 
   // 导出数据
   const handleExport = async () => {
@@ -93,15 +87,16 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
       const arrayBuffer = await uploadFile.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
       
-      const result = await window.electronAPI.importData(Array.from(uint8Array), values);
+      const result = await window.electronAPI.importData(Array.from(uint8Array), {
+        format: values.format,
+        mergeStrategy: 'merge',
+        validateIntegrity: false,
+        dryRun: false,
+        archivePassword: values.archivePassword
+      });
       
       if (result.success) {
-        setImportResult(result.data);
-        if (values.dryRun) {
-          message.info('预览完成，请查看导入预览结果');
-        } else {
-          message.success(`导入成功，共处理 ${result.data?.processed || 0} 条记录`);
-        }
+        message.success(`导入成功，共处理 ${result.data?.imported || 0} 条记录`);
       } else {
         message.error(result.error || '导入失败');
       }
@@ -115,14 +110,22 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
 
   // 文件上传配置
   const uploadProps = {
-    accept: '.json,.csv,.mima',
+    accept: '.json,.mima,.zip',
     maxCount: 1,
     beforeUpload: (file: File) => {
       setUploadFile(file);
+      const name = file.name.toLowerCase();
+      let fmt: 'json' | 'csv' | 'encrypted_zip' | 'zip' = 'json';
+      if (name.endsWith('.mima')) fmt = 'encrypted_zip';
+      else if (name.endsWith('.zip')) fmt = 'zip';
+      else if (name.endsWith('.csv')) fmt = 'csv';
+      else fmt = 'json';
+      importForm.setFieldsValue({ format: fmt });
       return false; // 阻止自动上传
     },
     onRemove: () => {
       setUploadFile(null);
+      importForm.setFieldsValue({ format: 'json' });
     },
   };
 
@@ -152,18 +155,10 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
       ]}
     >
       <div style={{ marginBottom: 16 }}>
-        <Radio.Group
-          value={mode}
-          onChange={(e) => {
-            setMode(e.target.value);
-            setImportResult(null);
-            setUploadFile(null);
-          }}
-          buttonStyle="solid"
-        >
-          <Radio.Button value="export">导出数据</Radio.Button>
-          <Radio.Button value="import">导入数据</Radio.Button>
-        </Radio.Group>
+        <Select value={mode} onChange={(v) => { setMode(v as any); setUploadFile(null); }} style={{ width: 160 }}>
+          <Option value="export">导出数据</Option>
+          <Option value="import">导入数据</Option>
+        </Select>
       </div>
 
       {mode === 'export' ? (
@@ -171,12 +166,7 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
           form={exportForm}
           layout="vertical"
           initialValues={{
-            format: 'json',
-            includeHistory: true,
-            includeGroups: true,
-            includeSettings: true,
-            passwordStrength: 'medium',
-            compressionLevel: 6,
+            format: 'json'
           }}
         >
           <Form.Item
@@ -197,6 +187,12 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
                   加密备份包（AES-256加密，后缀 .mima）
                 </Space>
               </Option>
+              <Option value="zip">
+                <Space>
+                  <LockOutlined />
+                  标准ZIP（密码保护，内含可读数据）
+                </Space>
+              </Option>
             </Select>
           </Form.Item>
 
@@ -205,7 +201,7 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
             noStyle
             shouldUpdate={(prev, cur) => prev.format !== cur.format}
           >
-            {({ getFieldValue }) => getFieldValue('format') === 'encrypted_zip' ? (
+            {({ getFieldValue }) => ['encrypted_zip','zip'].includes(getFieldValue('format')) ? (
               <Form.Item
                 label="备份包密码"
                 name="archivePassword"
@@ -216,64 +212,23 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
             ) : null}
           </Form.Item>
 
-          <Divider>导出内容</Divider>
-
           <Form.Item
-            label="包含密码历史记录"
-            name="includeHistory"
-            valuePropName="checked"
-            tooltip="是否导出密码的修改历史记录"
+            noStyle
+            shouldUpdate={(prev, cur) => prev.format !== cur.format}
           >
-            <Switch />
+            {({ getFieldValue }) => getFieldValue('format') === 'zip' ? null : null}
           </Form.Item>
 
-          <Form.Item
-            label="包含分组信息"
-            name="includeGroups"
-            valuePropName="checked"
-            tooltip="是否导出分组结构和设置"
-          >
-            <Switch />
-          </Form.Item>
+          
 
-          <Form.Item
-            label="包含用户设置"
-            name="includeSettings"
-            valuePropName="checked"
-            tooltip="是否导出用户配置和偏好设置"
-          >
-            <Switch />
-          </Form.Item>
-
-          <Form.Item
-            label="密码强度过滤"
-            name="passwordStrength"
-            tooltip="只导出指定强度及以上的密码"
-          >
-            <Select>
-              <Option value="weak">弱密码及以上</Option>
-              <Option value="medium">中等强度及以上</Option>
-              <Option value="strong">仅强密码</Option>
-            </Select>
-          </Form.Item>
-
-          <Form.Item
-            label="压缩级别"
-            name="compressionLevel"
-            tooltip="压缩级别，1最快但压缩率低，9最慢但压缩率高"
-          >
-            <InputNumber min={1} max={9} style={{ width: '100%' }} />
-          </Form.Item>
+          {/* 已取消密码强度过滤与压缩级别选项 */}
         </Form>
       ) : (
         <Form
           form={importForm}
           layout="vertical"
           initialValues={{
-            format: 'json',
-            mergeStrategy: 'merge',
-            validateIntegrity: true,
-            dryRun: false,
+            format: 'json'
           }}
         >
           <Form.Item label="选择文件" required>
@@ -283,18 +238,12 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
               </p>
               <p className="ant-upload-text">点击或拖拽文件到此区域上传</p>
               <p className="ant-upload-hint">
-                支持 JSON、CSV 和加密备份包（.mima）格式
+                支持 JSON、加密备份包（.mima）与密码保护 ZIP（仅含 JSON）
               </p>
             </Dragger>
           </Form.Item>
 
-          {uploadFile && (
-            <Alert
-              message={`已选择文件: ${uploadFile.name}`}
-              type="info"
-              style={{ marginBottom: 16 }}
-            />
-          )}
+          {/* 已选择文件提示取消 */}
 
           <Form.Item
             label="文件格式"
@@ -305,80 +254,21 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
               <Option value="json">JSON格式</Option>
               <Option value="csv">CSV格式</Option>
               <Option value="encrypted_zip">加密备份包（.mima）</Option>
+              <Option value="zip">标准ZIP（密码保护）</Option>
             </Select>
           </Form.Item>
 
-          <Form.Item
-            noStyle
-            shouldUpdate={(prev, cur) => prev.format !== cur.format}
-          >
-            {({ getFieldValue }) => getFieldValue('format') === 'encrypted_zip' ? (
-              <Form.Item
-                label="备份包密码"
-                name="archivePassword"
-                rules={[{ required: true, message: '请输入备份包密码' }]}
-              >
-                <Input.Password style={{ width: '100%' }} placeholder="请输入密码" />
-              </Form.Item>
-            ) : null}
-          </Form.Item>
+          {(['encrypted_zip','zip'] as any).includes(importForm.getFieldValue('format')) ? (
+            <Form.Item
+              label="备份包密码"
+              name="archivePassword"
+              rules={[{ required: true, message: '请输入备份包密码' }]}
+            >
+              <Input.Password style={{ width: '100%' }} placeholder="请输入密码" />
+            </Form.Item>
+          ) : null}
 
-          <Divider>导入选项</Divider>
-
-          <Form.Item
-            label="合并策略"
-            name="mergeStrategy"
-            tooltip="如何处理与现有数据的冲突"
-          >
-            <Radio.Group>
-              <Radio value="replace">替换现有数据</Radio>
-              <Radio value="merge">智能合并</Radio>
-              <Radio value="skip">跳过冲突项</Radio>
-            </Radio.Group>
-          </Form.Item>
-
-          <Form.Item
-            label="验证数据完整性"
-            name="validateIntegrity"
-            valuePropName="checked"
-            tooltip="导入前验证数据完整性和格式正确性"
-          >
-            <Switch />
-          </Form.Item>
-
-          <Form.Item
-            label="预览模式"
-            name="dryRun"
-            valuePropName="checked"
-            tooltip="仅预览导入结果，不实际导入数据"
-          >
-            <Switch />
-          </Form.Item>
-
-          {importResult && (
-            <div style={{ marginTop: 16 }}>
-              <Title level={5}>导入预览</Title>
-              <Text>预计导入 {importResult.processed || 0} 条记录</Text>
-              {importResult.warnings && importResult.warnings.length > 0 && (
-                <Alert
-                  message="警告"
-                  description={importResult.warnings.join(', ')}
-                  type="warning"
-                  showIcon
-                  style={{ marginTop: 8 }}
-                />
-              )}
-              {importResult.errors && importResult.errors.length > 0 && (
-                <Alert
-                  message="错误"
-                  description={importResult.errors.join(', ')}
-                  type="error"
-                  showIcon
-                  style={{ marginTop: 8 }}
-                />
-              )}
-            </div>
-          )}
+          {/* 导入选项取消，默认智能合并 */}
         </Form>
       )}
     </Modal>

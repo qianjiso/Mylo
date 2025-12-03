@@ -39,7 +39,7 @@ export class GroupService {
     return this.buildGroupTree(groups, parentId);
   }
 
-  /** 保存分组（新增/更新），保证名称唯一、无循环引用、排序正确 */
+  /** 保存分组（UI路径：新增/更新），保证名称唯一、无循环引用、排序正确 */
   public saveGroup(group: Group): number {
     this.validateGroup(group);
 
@@ -80,6 +80,47 @@ export class GroupService {
       );
       const result = stmt.run(group.name, parentId, color, sortValue, now, now);
       return result.lastInsertRowid as number;
+    }
+  }
+
+  /** 保存分组（导入路径：Upsert），允许显式指定 id 插入 */
+  public saveGroupFromImport(group: Group): number {
+    this.validateGroup(group);
+    const now = new Date().toISOString();
+    const color = group.color || 'blue';
+    const parentId = group.parent_id ?? null;
+
+    if (group.id) {
+      const existing = this.db.prepare('SELECT id FROM groups WHERE id = ?').get(group.id) as { id: number } | undefined;
+      if (existing) {
+        const stmt = this.db.prepare(
+          `UPDATE groups SET name = ?, parent_id = ?, color = ?, sort = COALESCE(?, sort), updated_at = ? WHERE id = ?`
+        );
+        stmt.run(group.name, parentId, color, group.sort ?? null, now, group.id);
+        return group.id;
+      } else {
+        const sortValue = group.sort ?? this.getNextGroupSort(parentId ?? undefined);
+        const stmt = this.db.prepare(
+          `INSERT INTO groups (id, name, parent_id, color, sort, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`
+        );
+        const res = stmt.run(group.id, group.name, parentId, color, sortValue, now, now);
+        return res.lastInsertRowid as number;
+      }
+    } else {
+      const byName = this.getGroupByName(group.name, parentId ?? undefined);
+      if (byName) {
+        const stmt = this.db.prepare(
+          `UPDATE groups SET parent_id = ?, color = ?, sort = COALESCE(?, sort), updated_at = ? WHERE id = ?`
+        );
+        stmt.run(parentId, color, group.sort ?? null, now, byName.id);
+        return byName.id!;
+      }
+      const sortValue = group.sort ?? this.getNextGroupSort(parentId ?? undefined);
+      const stmt = this.db.prepare(
+        `INSERT INTO groups (name, parent_id, color, sort, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`
+      );
+      const res = stmt.run(group.name, parentId, color, sortValue, now, now);
+      return res.lastInsertRowid as number;
     }
   }
 

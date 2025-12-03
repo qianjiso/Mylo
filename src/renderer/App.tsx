@@ -103,6 +103,19 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (window.electronAPI?.onDataImported) {
+      window.electronAPI.onDataImported(async () => {
+        await loadGroups();
+        if (selectedGroupId) {
+          await loadPasswords(selectedGroupId);
+        } else {
+          await loadRecentPasswords();
+        }
+      });
+    }
+  }, [selectedGroupId]);
+
+  useEffect(() => {
     if (selectedGroupId) {
       loadPasswords(selectedGroupId);
       setSearchQuery('');

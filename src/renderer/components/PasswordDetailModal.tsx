@@ -107,7 +107,6 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
     form.setFieldsValue({ password: generatedPassword });
     setPasswordGeneratorVisible(false);
     setShowPassword(true);
-    message.success('密码已生成');
   };
 
   const handleDelete = () => {
