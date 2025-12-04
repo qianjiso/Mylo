@@ -82,13 +82,7 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
 
     try {
       setLoading(true);
-      const inferredFormat = uploadFile.name.toLowerCase().endsWith('.zip') ? 'encrypted_zip' : 'json';
-      const fmt = (importForm.getFieldValue('format') as 'json' | 'encrypted_zip') || inferredFormat;
-      const pwd = archivePwd;
-      if (fmt === 'encrypted_zip' && (!pwd || String(pwd).length < 4)) {
-        message.error('请输入至少4位备份包密码');
-        return;
-      }
+      const fmt = 'json' as const;
 
       // 读取文件内容
       const arrayBuffer = await uploadFile.arrayBuffer();
@@ -98,8 +92,7 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
         format: fmt,
         mergeStrategy: 'merge',
         validateIntegrity: false,
-        dryRun: false,
-        archivePassword: pwd
+        dryRun: false
       });
       
       if (result.success) {
@@ -117,21 +110,16 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
 
   // 文件上传配置
   const uploadProps = {
-    accept: '.json,.zip',
+    accept: '.json',
     maxCount: 1,
     beforeUpload: (file: File) => {
       setUploadFile(file);
-      const name = file.name.toLowerCase();
-      let fmt: 'json' | 'encrypted_zip' = 'json';
-      if (name.endsWith('.zip')) fmt = 'encrypted_zip';
-      else fmt = 'json';
-      importForm.setFieldsValue({ format: fmt });
+      importForm.setFieldsValue({ format: 'json' });
       return false; // 阻止自动上传
     },
     onRemove: () => {
       setUploadFile(null);
       importForm.setFieldsValue({ format: 'json' });
-      setArchivePwd('');
     },
   };
 
@@ -237,46 +225,19 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
                 <InboxOutlined />
               </p>
               <p className="ant-upload-text">点击或拖拽文件到此区域上传</p>
-              <p className="ant-upload-hint">
-                支持 JSON 与加密ZIP（仅含 JSON，需密码）
-              </p>
+              <p className="ant-upload-hint">支持 JSON 文件</p>
             </Dragger>
           </Form.Item>
 
           {/* 已选择文件提示取消 */}
 
-          <Form.Item
-            label="文件格式"
-            name="format"
-            tooltip="指定导入文件的格式"
-          >
+          <Form.Item label="文件格式" name="format" tooltip="指定导入文件的格式">
             <Select>
               <Option value="json">JSON格式</Option>
-              <Option value="encrypted_zip">加密ZIP（需密码）</Option>
             </Select>
           </Form.Item>
 
-          <Form.Item
-            label="备份包密码"
-            name="archivePassword"
-            hidden={importForm.getFieldValue('format') !== 'encrypted_zip'}
-            preserve
-            rules={[
-              {
-                validator: async (_, value) => {
-                  const fmt = importForm.getFieldValue('format');
-                  if (fmt === 'encrypted_zip') {
-                    if (!value || String(value).length < 4) {
-                      return Promise.reject(new Error('请输入至少4位备份包密码'));
-                    }
-                  }
-                  return Promise.resolve();
-                },
-              },
-            ]}
-          >
-            <Input.Password style={{ width: '100%' }} placeholder="请输入密码" value={archivePwd} onChange={(e) => setArchivePwd(e.target.value)} />
-          </Form.Item>
+          
 
           {/* 导入选项取消，默认智能合并 */}
         </Form>

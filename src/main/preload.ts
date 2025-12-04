@@ -130,7 +130,7 @@ export interface ElectronAPI {
 
   // 文件操作
   exportData: (options: {
-    format: 'json' | 'encrypted_zip' | 'zip';
+    format: 'json' | 'encrypted_zip';
     includeHistory?: boolean;
     includeGroups?: boolean;
     includeSettings?: boolean;
@@ -138,11 +138,10 @@ export interface ElectronAPI {
   }) => Promise<{ success: boolean; data?: number[]; error?: string }>;
   
   importData: (data: number[], options: {
-    format: 'json' | 'csv' | 'encrypted_zip' | 'zip';
+    format: 'json';
     mergeStrategy: 'replace' | 'merge' | 'skip';
     validateIntegrity: boolean;
     dryRun: boolean;
-    archivePassword?: string;
   }) => Promise<{ success: boolean; data?: any; error?: string }>;
 
   onDataImported: (handler: (payload: { imported: number; skipped: number }) => void) => void;

@@ -9,9 +9,7 @@ import { createCrypto } from '../../shared/security/crypto';
 import archiver from 'archiver';
 import zipEncrypted from 'archiver-zip-encrypted';
 import { PassThrough } from 'stream';
-import StreamZip from 'node-stream-zip';
-import * as fs from 'fs';
-import * as os from 'os';
+// 移除 ZIP/CSV 导入相关依赖
 
 // 类型定义由模块服务导出，保持单一来源
 
@@ -796,7 +794,7 @@ export class DatabaseService {
 
   // 导入导出功能
   public exportData(options: {
-    format: 'json' | 'encrypted_zip' | 'zip';
+    format: 'json' | 'encrypted_zip';
     includeHistory?: boolean;
     includeGroups?: boolean;
     includeSettings?: boolean;
@@ -810,7 +808,7 @@ export class DatabaseService {
           app_name: 'Password Manager'
         };
 
-        // 导出密码数据
+        // 导出密码数据（敏感字段保持加密）
         const passwords = this.getPasswords();
         exportData.passwords = passwords.map(password => ({
           ...password,
@@ -849,22 +847,18 @@ export class DatabaseService {
         let result: Uint8Array;
 
         switch (options.format) {
-          case 'json':
+          case 'json': {
             const jsonString = JSON.stringify(exportData, null, 2);
             result = new TextEncoder().encode(jsonString);
             break;
-
-          case 'encrypted_zip':
+          }
+          case 'encrypted_zip': {
             if (!options.archivePassword || options.archivePassword.length < 4) {
               throw new Error('请为加密备份包设置至少4位的密码');
             }
             result = await this.createZipArchive(exportData, options.archivePassword);
             break;
-
-          case 'zip':
-            result = await this.createZipArchive(exportData, undefined);
-            break;
-
+          }
           default:
             throw new Error(`不支持的导出格式: ${options.format}`);
         }
@@ -937,11 +931,10 @@ export class DatabaseService {
   }
 
   public importData(data: Uint8Array, options: {
-    format: 'json' | 'csv' | 'encrypted_zip' | 'zip';
+    format: 'json';
     mergeStrategy: 'replace' | 'merge' | 'skip';
     validateIntegrity: boolean;
     dryRun: boolean;
-    archivePassword?: string;
   }): Promise<{
     success: boolean;
     imported: number;
@@ -951,7 +944,6 @@ export class DatabaseService {
   }> {
     return new Promise(async (resolve, reject) => {
       try {
-        console.info('importData:start', { format: options.format, size: data.length, mergeStrategy: options.mergeStrategy, validateIntegrity: options.validateIntegrity, dryRun: options.dryRun });
         const result = {
           success: true,
           imported: 0,
@@ -959,40 +951,8 @@ export class DatabaseService {
           errors: [] as string[],
           warnings: [] as string[]
         };
-
-        let importData: any;
-
-        switch (options.format) {
-          case 'json':
-            const jsonString = new TextDecoder().decode(data);
-            importData = JSON.parse(jsonString);
-            console.info('importData:parsed json');
-            break;
-
-
-          case 'encrypted_zip':
-            if (!options.archivePassword) throw new Error('缺少加密包密码');
-            importData = await this.parseStandardZip(data, options.archivePassword);
-            console.info('importData:parsed encrypted_zip');
-            break;
-
-          case 'zip':
-            importData = await this.parseStandardZip(data, options.archivePassword);
-            console.info('importData:parsed zip');
-            break;
-
-          default:
-            throw new Error(`不支持的导入格式: ${options.format}`);
-        }
-
-        console.info('importData:counts', {
-          passwords: Array.isArray(importData.passwords) ? importData.passwords.length : 0,
-          groups: Array.isArray(importData.groups) ? importData.groups.length : 0,
-          note_groups: Array.isArray(importData.note_groups) ? importData.note_groups.length : 0,
-          notes: Array.isArray(importData.notes) ? importData.notes.length : 0,
-          user_settings: Array.isArray(importData.user_settings) ? importData.user_settings.length : 0,
-          password_history: Array.isArray(importData.password_history) ? importData.password_history.length : 0,
-        });
+        const jsonString = new TextDecoder().decode(data);
+        const importData: any = JSON.parse(jsonString);
 
         // 验证数据完整性
         if (options.validateIntegrity) {
@@ -1014,7 +974,6 @@ export class DatabaseService {
 
         // 根据合并策略处理现有数据
         if (options.mergeStrategy === 'replace') {
-          console.info('importData:clearAllData');
           await this.clearAllData();
         }
 
@@ -1053,13 +1012,11 @@ export class DatabaseService {
                   savedId = this.saveGroupFromImport({ name: group.name, parent_id: parentNew ?? undefined, color: group.color, sort: group.sort });
                 }
                 if (typeof group.id === 'number') groupIdMap.set(group.id, savedId);
-                console.info('importData:groupSaved', { name: group.name, oldId: group.id, newId: savedId, parentOld: group.parent_id ?? null, parentNew: parentNew ?? null });
                 result.imported++;
                 pending.splice(i, 1);
                 progressed = true;
                 i--;
               } catch (error) {
-                console.error('importData:groupError', { name: group.name, err: (error as Error).message });
                 // 暂不移除，等待父分组映射后重试；最终无法处理则报错
                 continue;
               }
@@ -1067,7 +1024,6 @@ export class DatabaseService {
             if (!progressed) {
               for (const g of pending) {
                 result.errors.push(`导入分组失败（父分组缺失或非法）: ${g.name}`);
-                console.error('importData:groupFailed', { name: g.name });
               }
               break;
             }
@@ -1094,20 +1050,17 @@ export class DatabaseService {
                   newId = this.saveNoteGroupFromImport({ name: ng.name, parent_id: parentNew ?? null, color: ng.color || 'blue', sort_order: ng.sort_order || 0 });
                 }
                 if (typeof ng.id === 'number') noteGroupIdMap.set(ng.id, newId);
-                console.info('importData:noteGroupSaved', { name: ng.name, oldId: ng.id, newId, parentOld: ng.parent_id ?? null, parentNew: parentNew ?? null });
                 result.imported++;
                 pendingNG.splice(i, 1);
                 progressed = true;
                 i--;
               } catch (error) {
-                console.error('importData:noteGroupError', { name: ng.name, err: (error as Error).message });
                 continue;
               }
             }
             if (!progressed) {
               for (const ng of pendingNG) {
                 result.errors.push(`导入便签分组失败（父分组缺失或非法）: ${ng.name}`);
-                console.error('importData:noteGroupFailed', { name: ng.name });
               }
               break;
             }
@@ -1122,11 +1075,9 @@ export class DatabaseService {
               const existed = note.id ? this.noteService.getNoteById(note.id) : null;
               if (options.mergeStrategy === 'skip' && existed) { result.skipped++; continue; }
               this.saveNoteFromImport({ id: note.id, title: note.title || null, content_ciphertext: note.content_ciphertext, group_id: gid || null, pinned: !!note.pinned, archived: !!note.archived });
-              console.info('importData:noteSaved', { title: note.title || null, id: note.id || null, group_id: gid || null });
               result.imported++;
             } catch (error) {
               result.errors.push(`导入便签失败: ${note.title || ''} - ${error}`);
-              console.error('importData:noteError', { title: note.title || null, id: note.id || null, err: (error as Error).message });
             }
           }
         }
@@ -1153,11 +1104,9 @@ export class DatabaseService {
                 password.multi_accounts = this.encrypt(password.multi_accounts);
               }
               this.savePasswordFromImport(password);
-              console.info('importData:passwordSaved', { title: password.title, id: password.id || null, group_id: password.group_id || null, hasPwd: !!password.password, hasMulti: !!password.multi_accounts });
               result.imported++;
             } catch (error) {
               result.errors.push(`导入密码失败: ${password.title} - ${error}`);
-              console.error('importData:passwordError', { title: password.title, id: password.id || null, err: (error as Error).message });
             }
           }
         }
@@ -1168,11 +1117,9 @@ export class DatabaseService {
             try {
               this.settingsService.validateUserSetting(setting);
               this.saveUserSettingFromImport(setting);
-              console.info('importData:settingSaved', { key: setting.key });
               result.imported++;
             } catch (error) {
               result.errors.push(`导入设置失败: ${setting.key} - ${error}`);
-              console.error('importData:settingError', { key: setting.key, err: (error as Error).message });
             }
           }
         }
@@ -1189,11 +1136,9 @@ export class DatabaseService {
                 history.new_password = this.encrypt(history.new_password);
               }
               this.addPasswordHistory(history);
-              console.info('importData:historySaved', { password_id: history.password_id });
               result.imported++;
             } catch (error) {
               result.errors.push(`导入历史记录失败: ${history.password_id} - ${error}`);
-              console.error('importData:historyError', { password_id: history.password_id, err: (error as Error).message });
             }
           }
         }
@@ -1201,93 +1146,13 @@ export class DatabaseService {
         // 已统一在上文的便签导入中处理（含ID映射与更新）
 
         result.success = result.errors.length === 0;
-        console.info('importData:done', { success: result.success, imported: result.imported, skipped: result.skipped, errors: result.errors.length, warnings: result.warnings.length });
         resolve(result);
       } catch (error) {
-        console.error('importData:fatal', error as any);
         reject(error);
       }
     });
   }
 
-  private async parseStandardZip(data: Uint8Array, archivePassword?: string): Promise<any> {
-    const tmpDir = os.tmpdir();
-    const tmpFile = path.join(tmpDir, `mylo_import_${Date.now()}_${Math.random().toString(16).slice(2)}.zip`);
-    await fs.promises.writeFile(tmpFile, Buffer.from(data));
-    const options: any = { file: tmpFile };
-    if (archivePassword && archivePassword.length > 0) options.password = archivePassword;
-    const zip = new (StreamZip as any).async(options);
-    try {
-      const entries = await zip.entries();
-      const names = Object.keys(entries);
-      const chosen: string | undefined = names.find((n: string) => n.endsWith('backup.json')) || names.find((n: string) => n.toLowerCase().endsWith('.json'));
-      if (!chosen) throw new Error('压缩包中未找到可识别的数据文件');
-      try {
-        const buf: Buffer = await zip.entryData(chosen);
-        return JSON.parse(buf.toString('utf8'));
-      } catch (err: any) {
-        if (String(err?.message || err).includes('Entry encrypted')) {
-          throw new Error('压缩包条目已加密，请提供正确的备份密码');
-        }
-        throw err;
-      }
-    } finally {
-      await zip.close();
-      try { await fs.promises.unlink(tmpFile); } catch (e) { void e; }
-    }
-  }
-
-
-  private parseCSVData(data: Uint8Array): any {
-    const csvString = new TextDecoder().decode(data);
-    const lines = csvString.split('\n');
-    const headers = lines[0].split(',').map(h => h.trim());
-    
-    const passwords = [];
-    
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
-      
-      const values = this.parseCSVLine(line);
-      const password: any = {};
-      
-      headers.forEach((header, index) => {
-        password[header] = values[index] || '';
-      });
-      
-      passwords.push(password);
-    }
-    
-    return { passwords };
-  }
-
-  private parseCSVLine(line: string): string[] {
-    const values = [];
-    let current = '';
-    let inQuotes = false;
-    
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      
-      if (char === '"') {
-        if (inQuotes && line[i + 1] === '"') {
-          current += '"';
-          i++; // 跳过下一个引号
-        } else {
-          inQuotes = !inQuotes;
-        }
-      } else if (char === ',' && !inQuotes) {
-        values.push(current);
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-    
-    values.push(current);
-    return values;
-  }
 
   private validateImportData(data: any): {
     isValid: boolean;

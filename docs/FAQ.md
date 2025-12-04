@@ -42,8 +42,8 @@
 cd ~/Library/Application\ Support/Mylo
 sqlite3 passwords.db "select * from passwords"
 sqlite3 passwords.db "select * from groups"
-sqlite3 passwords.db "select * from note_groups"
-sqlite3 passwords.db "select * from notes"
+sqlite3 passwords.db "select * from secure_record_groups"
+sqlite3 passwords.db "select * from secure_records"
 ```
 
 # 6.代码执行链路

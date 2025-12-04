@@ -336,52 +336,33 @@ class PasswordManagerApp {
 
     // 导出数据
     ipcMain.handle('export-data', async (_, options: {
-      format: 'json' | 'encrypted_zip' | 'zip';
+      format: 'json' | 'encrypted_zip';
       includeHistory?: boolean;
       includeGroups?: boolean;
       includeSettings?: boolean;
       archivePassword?: string;
     }) => {
       try {
-        console.info('ipc export-data request', { options: { ...options, archivePassword: options.archivePassword ? '***' : undefined } });
         const data = await this.databaseService!.exportData(options);
-        console.info('ipc export-data done', { bytes: data?.length || 0 });
         return { success: true, data: Array.from(data) };
       } catch (error) {
-        console.error('ipc export-data failed', error);
         return { success: false, error: (error as Error).message };
       }
     });
 
     // 导入数据
     ipcMain.handle('import-data', async (_, data: number[], options: {
-      format: 'json' | 'csv' | 'encrypted_zip' | 'zip';
+      format: 'json';
       mergeStrategy: 'replace' | 'merge' | 'skip';
       validateIntegrity: boolean;
       dryRun: boolean;
-      archivePassword?: string;
     }) => {
       try {
-        console.info('ipc import-data request', { size: data?.length || 0, options: { ...options, archivePassword: options.archivePassword ? '***' : undefined } });
         const uint8Array = new Uint8Array(data);
-        if (!options.format) {
-          const buf = Buffer.from(uint8Array);
-          const head = buf.slice(0, 4).toString('utf8');
-          if (buf.length >= 2 && buf[0] === 0x50 && buf[1] === 0x4B) {
-            options.format = 'zip';
-          } else if (head.trim().startsWith('{') || head.trim().startsWith('[')) {
-            options.format = 'json';
-          } else {
-            options.format = 'json';
-          }
-        }
-        console.info('ipc import-data resolved format', options.format);
         const result = await this.databaseService!.importData(uint8Array, options);
-        console.info('ipc import-data result', { imported: result.imported, skipped: result.skipped, errors: result.errors?.length || 0, warnings: result.warnings?.length || 0 });
         this.mainWindow?.webContents.send('data-imported', { imported: result.imported, skipped: result.skipped });
         return { success: true, data: result };
       } catch (error) {
-        console.error('ipc import-data failed', error);
         return { success: false, error: (error as Error).message };
       }
     });
