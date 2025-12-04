@@ -10,7 +10,7 @@
 - 🔎 全文搜索：SQLite FTS5 同步索引（title/username/url/notes）
 - 🧩 分组管理：树形分组、颜色标识、唯一性校验
 - 📝 历史记录：密码变更自动记录，历史查看支持隐私显示
-- 📤 导入导出：JSON/CSV 导出；JSON/CSV 导入与数据完整性验证
+- 📤 导入导出：JSON/加密 ZIP 导出；JSON 导入与数据完整性验证
 - 🎲 密码生成：可配置长度与字符集，支持一键生成与复制
 
 ## 📋 系统要求
@@ -47,7 +47,7 @@ mima_package/
 │   │   ├── index.html           # 页面模板
 │   │   ├── index.tsx            # React 入口
 │   │   └── App.tsx              # 主界面
-│   └── shared/security/crypto.ts# 加密适配器
+│   └── shared/types.ts          # 共享类型定义
 ├── docs/                        # 项目文档
 ├── scripts/start-electron.js    # 启动 Electron 脚本
 ├── webpack.main.config.js       # 主进程构建配置
@@ -183,13 +183,16 @@ const result = stmt.run('GitHub', 'username', 'encrypted_password');
 // 主进程 (main.ts)
 import { ipcMain } from 'electron';
 
-ipcMain.handle('get-passwords', async () => {
-  // 返回密码列表
-  return passwords;
-});
+registerPasswordIpc(databaseService);
+registerGroupIpc(databaseService);
+registerNotesIpc(databaseService);
+registerSettingsIpc(databaseService);
+registerBackupIpc(databaseService, mainWindow);
+registerSecurityIpc(databaseService);
 
-// 渲染进程 (React 组件)
-const passwords = await window.electronAPI.getPasswords();
+// 渲染进程 (Hooks)
+const { passwords, loadPasswords } = usePasswords();
+await loadPasswords();
 ```
 
 ## 🧪 测试
