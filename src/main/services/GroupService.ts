@@ -1,20 +1,6 @@
 import type Database from 'better-sqlite3';
 import * as GroupsRepo from '../repositories/groups';
-
-export interface Group {
-  id?: number;
-  name: string;
-  parent_id?: number;
-  color?: string;
-  order_index?: number;
-  sort?: number;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface GroupWithChildren extends Group {
-  children: GroupWithChildren[];
-}
+import { Group, GroupWithChildren } from '../../shared/types';
 
 /**
  * 分组模块服务，负责分组的查询、保存、删除及树结构维护

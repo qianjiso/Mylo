@@ -1,49 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-
-// 定义分组接口
-export interface Group {
-  id?: number;
-  name: string;
-  parent_id?: number;
-  color?: string;
-  order_index?: number;
-  sort?: number;
-  icon?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface GroupWithChildren extends Group {
-  children?: GroupWithChildren[];
-}
-
-// 定义密码历史记录接口
-export interface PasswordHistory {
-  id?: number;
-  password_id: number;
-  old_password: string;
-  new_password: string;
-  changed_at?: string;
-  changed_reason?: string;
-}
-
-// 定义用户设置接口
-export interface UserSetting {
-  id?: number;
-  key: string;
-  value: string;
-  type: string;
-  category: string;
-  description?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface UserSettingsCategory {
-  category: string;
-  description: string;
-  settings: string[];
-}
+import type { Group, GroupWithChildren, PasswordHistory, UserSetting, UserSettingsCategory, SecureRecord, SecureRecordGroup } from '../shared/types';
 
 // 定义暴露给渲染进程的API接口
 export interface ElectronAPI {
@@ -56,9 +12,6 @@ export interface ElectronAPI {
   searchPasswords(keyword: string): Promise<any[]>;
   advancedSearch(options: any): Promise<any[]>;
   
-  // 多账号密码管理
-  getPasswordMultiAccounts(id: number): Promise<string | null>;
-  setPasswordMultiAccounts(id: number, accounts: string): Promise<{ success: boolean; error?: string }>;
   updatePasswordWithHistory(id: number, newPassword: string, reason?: string): Promise<{ success: boolean; error?: string }>;
   
   // 密码历史记录
@@ -146,15 +99,15 @@ export interface ElectronAPI {
 
   onDataImported: (handler: (payload: { imported: number; skipped: number }) => void) => void;
 
-  getNoteGroups(): Promise<any[]>;
-  getNoteGroupTree(parentId?: number): Promise<any[]>;
-  addNoteGroup(group: any): Promise<{ success: boolean; id: number; error?: string }>;
-  updateNoteGroup(id: number, group: any): Promise<{ success: boolean; error?: string }>;
+  getNoteGroups(): Promise<SecureRecordGroup[]>;
+  getNoteGroupTree(parentId?: number): Promise<SecureRecordGroup[]>;
+  addNoteGroup(group: SecureRecordGroup): Promise<{ success: boolean; id: number; error?: string }>;
+  updateNoteGroup(id: number, group: SecureRecordGroup): Promise<{ success: boolean; error?: string }>;
   deleteNoteGroup(id: number): Promise<{ success: boolean; error?: string }>;
-  getNotes(groupId?: number): Promise<any[]>;
-  getNote(id: number): Promise<any>;
-  addNote(note: any): Promise<{ success: boolean; id: number; error?: string }>;
-  updateNote(id: number, note: any): Promise<{ success: boolean; error?: string }>;
+  getNotes(groupId?: number): Promise<SecureRecord[]>;
+  getNote(id: number): Promise<SecureRecord | null>;
+  addNote(note: SecureRecord): Promise<{ success: boolean; id: number; error?: string }>;
+  updateNote(id: number, note: SecureRecord): Promise<{ success: boolean; error?: string }>;
   deleteNote(id: number): Promise<{ success: boolean; error?: string }>;
   searchNotesTitle(keyword: string): Promise<any[]>;
 }
@@ -177,8 +130,6 @@ const electronAPI: ElectronAPI = {
   repairDataIntegrity: () => ipcRenderer.invoke('repair-data-integrity'),
   
   // 多账号密码管理
-  getPasswordMultiAccounts: (id) => ipcRenderer.invoke('get-password-multi-accounts', id),
-  setPasswordMultiAccounts: (id, accounts) => ipcRenderer.invoke('set-password-multi-accounts', id, accounts),
   updatePasswordWithHistory: (id, newPassword, reason) => ipcRenderer.invoke('update-password-with-history', id, newPassword, reason),
   
   // 密码历史记录

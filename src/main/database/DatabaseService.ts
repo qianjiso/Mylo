@@ -1,17 +1,15 @@
 import Database from 'better-sqlite3';
 import * as path from 'path';
 import { app } from 'electron';
-import GroupService, { Group, GroupWithChildren } from '../services/GroupService';
-import PasswordService, { PasswordItem, PasswordHistory } from '../services/PasswordService';
-import SettingsService, { UserSetting, UserSettingsCategory } from '../services/SettingsService';
-import NoteService, { SecureRecord, SecureRecordGroup } from '../services/NoteService';
+import GroupService from '../services/GroupService';
+import PasswordService from '../services/PasswordService';
+import SettingsService from '../services/SettingsService';
+import NoteService from '../services/NoteService';
+import { Group, GroupWithChildren, PasswordItem, PasswordHistory, UserSetting, UserSettingsCategory, SecureRecord, SecureRecordGroup } from '../../shared/types';
 import { createCrypto } from '../../shared/security/crypto';
-import archiver from 'archiver';
-import zipEncrypted from 'archiver-zip-encrypted';
-import { PassThrough } from 'stream';
-// 移除 ZIP/CSV 导入相关依赖
-
-// 类型定义由模块服务导出，保持单一来源
+import BackupService from '../services/BackupService';
+import IntegrityService from '../services/IntegrityService';
+ 
 
 export class DatabaseService {
   private db: Database.Database | null = null;
@@ -21,6 +19,8 @@ export class DatabaseService {
   private settingsService!: SettingsService;
   private noteService!: NoteService;
   private cryptoAdapter!: { encrypt: (text: string) => string; decrypt: (text: string) => string };
+  private backupService!: BackupService;
+  private integrityService!: IntegrityService;
 
   constructor() {
     // 从环境变量或默认值获取加密密钥
@@ -47,6 +47,8 @@ export class DatabaseService {
       this.passwordService = new PasswordService(this.db, this.cryptoAdapter);
       this.settingsService = new SettingsService(this.db);
       this.noteService = new NoteService(this.db, this.cryptoAdapter);
+      this.backupService = new BackupService(this.db, this.cryptoAdapter, this.groupService, this.passwordService, this.settingsService, this.noteService);
+      this.integrityService = new IntegrityService(this.db);
     } catch (error) {
       console.error('Database initialization error:', error);
       throw error;
@@ -521,9 +523,7 @@ export class DatabaseService {
     }
     
     const hasSinglePassword = !!(password.password && password.password.trim().length > 0);
-    const multiRaw = (password as any).multi_accounts || (password as any).multiAccounts;
-    const hasMultiAccounts = !!(multiRaw && String(multiRaw).trim().length > 0);
-    if (!hasSinglePassword && !hasMultiAccounts) {
+    if (!hasSinglePassword && !password.id) {
       throw new Error('密码不能为空');
     }
     
@@ -535,9 +535,7 @@ export class DatabaseService {
       throw new Error('备注长度不能超过10000个字符');
     }
     
-    if (multiRaw && String(multiRaw).length > 50000) {
-      throw new Error('多账号信息长度不能超过50000个字符');
-    }
+    
     // 取消URL内容格式校验，允许任意字符串（保留长度限制）
   }
 
@@ -745,14 +743,7 @@ export class DatabaseService {
   }
 
   // 获取密码的多账号信息
-  public getPasswordMultiAccounts(id: number): string | null {
-    return this.passwordService.getPasswordMultiAccounts(id);
-  }
-
-  // 设置密码的多账号信息
-  public setPasswordMultiAccounts(id: number, accounts: string): void {
-    this.passwordService.setPasswordMultiAccounts(id, accounts);
-  }
+  
 
   // 更新密码（记录历史）
   public updatePassword(id: number, newPassword: string, reason?: string): void {
@@ -800,137 +791,12 @@ export class DatabaseService {
     includeSettings?: boolean;
     archivePassword?: string;
   }): Promise<Uint8Array> {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const exportData: any = {
-          version: '1.0',
-          exported_at: new Date().toISOString(),
-          app_name: 'Password Manager'
-        };
-
-        // 导出密码数据（按需求输出明文密码；多账号仍保持原策略）
-        const passwords = this.getPasswords();
-        exportData.passwords = passwords.map(password => ({
-          ...password,
-          // 明文输出密码
-          password: password.password ? password.password : null,
-          // 仍按原策略处理多账号字段（保持加密）
-          multi_accounts: password.multi_accounts ? this.encrypt(password.multi_accounts) : null
-        }));
-
-        // 导出分组数据（密码分组 + 便签分组）始终包含
-        const groups = this.getGroups();
-        exportData.groups = groups;
-        const noteGroups = this.getNoteGroups();
-        exportData.note_groups = noteGroups;
-
-        // 导出用户设置（默认包含）
-        const includeSettings = options.includeSettings ?? true;
-        if (includeSettings) {
-          const settings = this.exportSettings();
-          exportData.user_settings = settings;
-        }
-
-        // 导出密码历史（默认包含）
-        const includeHistory = options.includeHistory ?? true;
-        if (includeHistory) {
-          const history = this.db!.prepare('SELECT * FROM password_history').all();
-          exportData.password_history = history.map((h: any) => ({
-            ...h,
-            old_password: this.encrypt(h.old_password),
-            new_password: this.encrypt(h.new_password)
-          }));
-        }
-
-        // 导出便签列表（始终包含，内容为明文）
-        const notes = this.getNotes();
-        exportData.notes = notes;
-
-        let result: Uint8Array;
-
-        switch (options.format) {
-          case 'json': {
-            const jsonString = JSON.stringify(exportData, null, 2);
-            result = new TextEncoder().encode(jsonString);
-            break;
-          }
-          case 'encrypted_zip': {
-            if (!options.archivePassword || options.archivePassword.length < 4) {
-              throw new Error('请为加密备份包设置至少4位的密码');
-            }
-            result = await this.createZipArchive(exportData, options.archivePassword);
-            break;
-          }
-          default:
-            throw new Error(`不支持的导出格式: ${options.format}`);
-        }
-
-        resolve(result);
-      } catch (error) {
-        reject(error);
-      }
-    });
+    return this.backupService.exportData(options);
   }
 
   // 保留CSV工具但不对外导出
-  private exportToCSV(passwords: any[]): Uint8Array {
-    const headers = ['title', 'username', 'password', 'url', 'notes', 'group_name', 'created_at', 'updated_at'];
-    const csvRows = [headers.join(',')];
+  
 
-    for (const password of passwords) {
-      const row = [
-        this.escapeCSVField(password.title),
-        this.escapeCSVField(password.username),
-        this.escapeCSVField(password.password), // 保持加密状态
-        this.escapeCSVField(password.url),
-        this.escapeCSVField(password.notes),
-        this.escapeCSVField(password.group_name || ''),
-        password.created_at,
-        password.updated_at
-      ];
-      csvRows.push(row.join(','));
-    }
-
-    const csvString = csvRows.join('\n');
-    return new TextEncoder().encode(csvString);
-  }
-
-  private escapeCSVField(field: any): string {
-    const s = field == null ? '' : String(field);
-    if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-      return `"${s.replace(/"/g, '""')}"`;
-    }
-    return s;
-  }
-
-  private async createZipArchive(data: any, archivePassword?: string): Promise<Uint8Array> {
-    if (archivePassword) {
-      archiver.registerFormat('zip-encrypted', zipEncrypted as any);
-    }
-    const archive = archivePassword
-      ? archiver.create('zip-encrypted', { zlib: { level: 6 }, encryptionMethod: 'zip20', password: archivePassword })
-      : archiver.create('zip', { zlib: { level: 6 } });
-    const out = new PassThrough();
-    const chunks: Buffer[] = [];
-    out.on('data', (d: Buffer) => chunks.push(d));
-    const onError = (err: any) => { throw err; };
-    archive.on('error', onError);
-    archive.pipe(out);
-
-    // 仅写入 JSON（取消对 txt/csv 的支持）
-    const content = Buffer.from(JSON.stringify(data, null, 2), 'utf8');
-    const filename = 'backup.json';
-    archive.append(content, { name: filename });
-    archive.append(Buffer.from(JSON.stringify({ exported_at: new Date().toISOString() }, null, 2), 'utf8'), { name: 'meta.json' });
-
-    await archive.finalize();
-    // 使用 Node 的 finished 保证回调一次
-    const streamMod = await import('stream');
-    await new Promise<void>((resolve, reject) => {
-      (streamMod as any).finished(out, (err: any) => err ? reject(err) : resolve());
-    });
-    return new Uint8Array(Buffer.concat(chunks));
-  }
 
   public importData(data: Uint8Array, options: {
     format: 'json';
@@ -944,284 +810,10 @@ export class DatabaseService {
     errors: string[];
     warnings: string[];
   }> {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const result = {
-          success: true,
-          imported: 0,
-          skipped: 0,
-          errors: [] as string[],
-          warnings: [] as string[]
-        };
-        const jsonString = new TextDecoder().decode(data);
-        const importData: any = JSON.parse(jsonString);
-
-        // 验证数据完整性
-        if (options.validateIntegrity) {
-          const validation = this.validateImportData(importData);
-          if (!validation.isValid) {
-            result.errors.push(...validation.errors);
-            result.success = false;
-            resolve(result);
-            return;
-          }
-          result.warnings.push(...validation.warnings);
-        }
-
-        // 如果是试运行，直接返回验证结果
-        if (options.dryRun) {
-          resolve(result);
-          return;
-        }
-
-        // 根据合并策略处理现有数据
-        if (options.mergeStrategy === 'replace') {
-          await this.clearAllData();
-        }
-
-        // 导入分组（分层创建，按ID智能合并，并建立ID映射；确保父分组已存在）
-        const groupIdMap = new Map<number, number>();
-        if (importData.groups && importData.groups.length > 0) {
-          const pending = [...importData.groups];
-          while (pending.length > 0) {
-            let progressed = false;
-            for (let i = 0; i < pending.length; i++) {
-              const group = pending[i];
-              try {
-                this.groupService.validateGroup(group);
-                const parentOld = group.parent_id ?? null;
-                const parentNew = parentOld == null ? null : (groupIdMap.get(parentOld) ?? parentOld);
-                const parentOk = parentNew == null || !!this.groupService.getGroupById(parentNew);
-                if (!parentOk) continue; // 等待父分组先创建
-
-                const byId = group.id ? this.groupService.getGroupById(group.id) : undefined;
-                const byName = this.getGroupByName(group.name, parentNew ?? undefined);
-                if (options.mergeStrategy === 'skip' && (byId || byName)) {
-                  const mapped = (byId?.id ?? byName?.id);
-                  if (typeof group.id === 'number' && mapped) groupIdMap.set(group.id, mapped);
-                  result.skipped++;
-                  pending.splice(i, 1);
-                  progressed = true;
-                  i--;
-                  continue;
-                }
-                let savedId: number;
-                if (byId) {
-                  savedId = this.saveGroupFromImport({ ...group, id: byId.id, parent_id: parentNew ?? undefined });
-                } else if (byName) {
-                  savedId = this.saveGroupFromImport({ ...group, id: byName.id, parent_id: parentNew ?? undefined });
-                } else {
-                  savedId = this.saveGroupFromImport({ name: group.name, parent_id: parentNew ?? undefined, color: group.color, sort: group.sort });
-                }
-                if (typeof group.id === 'number') groupIdMap.set(group.id, savedId);
-                result.imported++;
-                pending.splice(i, 1);
-                progressed = true;
-                i--;
-              } catch (error) {
-                // 暂不移除，等待父分组映射后重试；最终无法处理则报错
-                continue;
-              }
-            }
-            if (!progressed) {
-              for (const g of pending) {
-                result.errors.push(`导入分组失败（父分组缺失或非法）: ${g.name}`);
-              }
-              break;
-            }
-          }
-        }
-
-        // 导入便签分组（分层创建），并建立ID映射
-        const noteGroupIdMap = new Map<number, number>();
-        if (importData.note_groups && importData.note_groups.length > 0) {
-          const pendingNG = [...importData.note_groups];
-          while (pendingNG.length > 0) {
-            let progressed = false;
-            for (let i = 0; i < pendingNG.length; i++) {
-              const ng = pendingNG[i];
-              try {
-                const parentOld = ng.parent_id ?? null;
-                const parentNew = parentOld == null ? null : (noteGroupIdMap.get(parentOld) ?? parentOld);
-                const row = this.db!.prepare('SELECT id FROM secure_record_groups WHERE name = ? AND (parent_id IS ? OR parent_id = ?)').get(ng.name, parentNew ?? null, parentNew ?? null) as { id?: number } | undefined;
-                let newId: number;
-                if (row && row.id) {
-                  // 更新父映射后保持名称分组
-                  newId = row.id;
-                } else {
-                  newId = this.saveNoteGroupFromImport({ name: ng.name, parent_id: parentNew ?? null, color: ng.color || 'blue', sort_order: ng.sort_order || 0 });
-                }
-                if (typeof ng.id === 'number') noteGroupIdMap.set(ng.id, newId);
-                result.imported++;
-                pendingNG.splice(i, 1);
-                progressed = true;
-                i--;
-              } catch (error) {
-                continue;
-              }
-            }
-            if (!progressed) {
-              for (const ng of pendingNG) {
-                result.errors.push(`导入便签分组失败（父分组缺失或非法）: ${ng.name}`);
-              }
-              break;
-            }
-          }
-        }
-
-        // 导入便签列表（内容为明文，保存时会加密；按ID智能合并）
-        if (importData.notes && importData.notes.length > 0) {
-          for (const note of importData.notes) {
-            try {
-              const gid = typeof note.group_id === 'number' ? (noteGroupIdMap.get(note.group_id) || note.group_id) : null;
-              const existed = note.id ? this.noteService.getNoteById(note.id) : null;
-              if (options.mergeStrategy === 'skip' && existed) { result.skipped++; continue; }
-              this.saveNoteFromImport({ id: note.id, title: note.title || null, content_ciphertext: note.content_ciphertext, group_id: gid || null, pinned: !!note.pinned, archived: !!note.archived });
-              result.imported++;
-            } catch (error) {
-              result.errors.push(`导入便签失败: ${note.title || ''} - ${error}`);
-            }
-          }
-        }
-
-        // 导入密码（按ID智能合并：存在则更新，否则新增）
-        if (importData.passwords && importData.passwords.length > 0) {
-          const existingPasswords = this.getPasswords();
-          for (const password of importData.passwords) {
-            try {
-              this.passwordService.validatePassword(password);
-              const existing = password.id ? existingPasswords.find(p => p.id === password.id) : undefined;
-              if (options.mergeStrategy === 'skip' && (existing || existingPasswords.find(p => p.title === password.title))) {
-                result.skipped++;
-                continue;
-              }
-              if (typeof password.group_id === 'number') {
-                const mapped = groupIdMap.get(password.group_id);
-                if (mapped) password.group_id = mapped;
-              }
-              if (password.password && !String(password.password).includes(':')) {
-                password.password = this.encrypt(password.password);
-              }
-              if (password.multi_accounts && !String(password.multi_accounts).includes(':')) {
-                password.multi_accounts = this.encrypt(password.multi_accounts);
-              }
-              this.savePasswordFromImport(password);
-              result.imported++;
-            } catch (error) {
-              result.errors.push(`导入密码失败: ${password.title} - ${error}`);
-            }
-          }
-        }
-
-        // 导入用户设置（按key更新或新增）
-        if (importData.user_settings && importData.user_settings.length > 0) {
-          for (const setting of importData.user_settings) {
-            try {
-              this.settingsService.validateUserSetting(setting);
-              this.saveUserSettingFromImport(setting);
-              result.imported++;
-            } catch (error) {
-              result.errors.push(`导入设置失败: ${setting.key} - ${error}`);
-            }
-          }
-        }
-
-        // 导入密码历史
-        if (importData.password_history && importData.password_history.length > 0) {
-          for (const history of importData.password_history) {
-            try {
-              // 确保密码已加密
-              if (history.old_password && !String(history.old_password).includes(':')) {
-                history.old_password = this.encrypt(history.old_password);
-              }
-              if (history.new_password && !String(history.new_password).includes(':')) {
-                history.new_password = this.encrypt(history.new_password);
-              }
-              this.addPasswordHistory(history);
-              result.imported++;
-            } catch (error) {
-              result.errors.push(`导入历史记录失败: ${history.password_id} - ${error}`);
-            }
-          }
-        }
-
-        // 已统一在上文的便签导入中处理（含ID映射与更新）
-
-        result.success = result.errors.length === 0;
-        resolve(result);
-      } catch (error) {
-        reject(error);
-      }
-    });
+    return this.backupService.importData(data, options);
   }
 
 
-  private validateImportData(data: any): {
-    isValid: boolean;
-    errors: string[];
-    warnings: string[];
-  } {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-
-    try {
-      // 检查版本兼容性
-      if (data.version && !this.isVersionCompatible(data.version)) {
-        errors.push(`不支持的导出数据版本: ${data.version}`);
-      }
-
-      // 检查必要字段
-      if (!data.passwords || !Array.isArray(data.passwords)) {
-        errors.push('缺少密码数据或格式不正确');
-      }
-
-      // 验证密码数据
-      if (data.passwords) {
-        for (const password of data.passwords) {
-          if (!password.title || !password.username) {
-            errors.push(`密码条目缺少必要字段: ${JSON.stringify(password)}`);
-          }
-        }
-      }
-
-      // 验证分组数据
-      if (data.groups) {
-        for (const group of data.groups) {
-          if (!group.name) {
-            errors.push(`分组缺少名称: ${JSON.stringify(group)}`);
-          }
-        }
-      }
-
-      // 检查数据量警告
-      if (data.passwords && data.passwords.length > 10000) {
-        warnings.push(`导入数据量较大 (${data.passwords.length} 条密码)，可能需要较长时间`);
-      }
-
-    } catch (error) {
-      errors.push(`数据验证失败: ${error}`);
-    }
-
-    return {
-      isValid: errors.length === 0,
-      errors,
-      warnings
-    };
-  }
-
-  private isVersionCompatible(version: string): boolean {
-    // 简单的版本兼容性检查
-    const supportedVersions = ['1.0'];
-    return supportedVersions.includes(version);
-  }
-
-  private async clearAllData(): Promise<void> {
-    // 清空所有数据（用于替换策略）
-    this.db!.prepare('DELETE FROM password_history').run();
-    this.db!.prepare('DELETE FROM passwords').run();
-    this.db!.prepare('DELETE FROM groups').run();
-    this.db!.prepare('DELETE FROM user_settings').run();
-  }
 
   // 导入设置
   public importSettings(settings: UserSetting[]): number {
@@ -1303,34 +895,7 @@ export class DatabaseService {
     errors: string[];
     warnings: string[];
   } {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-
-    try {
-      // 检查外键约束
-      this.checkForeignKeyIntegrity(errors);
-      
-      // 检查唯一性约束
-      this.checkUniquenessConstraints(errors);
-      
-      // 检查数据格式
-      this.checkDataFormat(errors, warnings);
-      
-      // 检查循环引用
-      this.checkCircularReferences(errors);
-      
-      // 检查孤立数据
-      this.checkOrphanedData(warnings);
-      
-    } catch (error) {
-      errors.push(`数据完整性检查失败: ${error}`);
-    }
-
-    return {
-      isValid: errors.length === 0,
-      errors,
-      warnings
-    };
+    return this.integrityService.check();
   }
 
   private checkForeignKeyIntegrity(errors: string[]): void {
@@ -1504,84 +1069,7 @@ export class DatabaseService {
     repaired: string[];
     failed: string[];
   } {
-    const repaired: string[] = [];
-    const failed: string[] = [];
-
-    try {
-      // 修复无效的外键引用
-      const repairedPasswords = this.db!.prepare(`
-        UPDATE passwords 
-        SET group_id = NULL 
-        WHERE group_id IS NOT NULL AND group_id NOT IN (SELECT id FROM groups)
-      `).run();
-
-      if (repairedPasswords.changes > 0) {
-        repaired.push(`修复了 ${repairedPasswords.changes} 条密码记录的无效分组引用`);
-      }
-
-      // 删除无效的密码历史记录
-      const repairedHistory = this.db!.prepare(`
-        DELETE FROM password_history 
-        WHERE password_id NOT IN (SELECT id FROM passwords)
-      `).run();
-
-      if (repairedHistory.changes > 0) {
-        repaired.push(`删除了 ${repairedHistory.changes} 条无效的密码历史记录`);
-      }
-
-      // 清理重复的用户设置（保留最新的）
-      const duplicateSettings = this.db!.prepare(`
-        SELECT key, MAX(updated_at) as latest_updated_at 
-        FROM user_settings 
-        GROUP BY key 
-        HAVING COUNT(*) > 1
-      `).all() as any[];
-
-      for (const setting of duplicateSettings) {
-        const deleted = this.db!.prepare(`
-          DELETE FROM user_settings 
-          WHERE key = ? AND updated_at != ?
-        `).run((setting as any).key, (setting as any).latest_updated_at);
-
-        if (deleted.changes > 0) {
-          repaired.push(`清理了用户设置 "${(setting as any).key}" 的 ${deleted.changes} 个重复项`);
-        }
-      }
-
-      // 清理重复的分组名称（重命名重复项）
-      const duplicateGroups = this.db!.prepare(`
-        SELECT name, parent_id, COUNT(*) as count 
-        FROM groups 
-        GROUP BY name, parent_id 
-        HAVING COUNT(*) > 1
-      `).all() as any[];
-
-      for (const group of duplicateGroups) {
-        const duplicateGroupRows = this.db!.prepare(`
-          SELECT id, name FROM groups 
-          WHERE name = ? AND parent_id = ? 
-          ORDER BY id
-        `).all((group as any).name, (group as any).parent_id);
-
-        for (let i = 1; i < duplicateGroupRows.length; i++) {
-          const newName = `${(group as any).name}_${i}`;
-          const updated = this.db!.prepare(`
-            UPDATE groups 
-            SET name = ?, updated_at = ? 
-            WHERE id = ?
-          `).run(newName, new Date().toISOString(), (duplicateGroupRows as any[])[i].id);
-
-          if (updated.changes > 0) {
-            repaired.push(`重命名重复分组 "${(group as any).name}" 为 "${newName}"`);
-          }
-        }
-      }
-
-    } catch (error) {
-      failed.push(`数据修复失败: ${error}`);
-    }
-
-    return { repaired, failed };
+    return this.integrityService.repair();
   }
 
   public close(): void {

@@ -1,21 +1,5 @@
 import type Database from 'better-sqlite3';
-
-export interface UserSetting {
-  id?: number;
-  key: string;
-  value: string;
-  type?: 'string' | 'number' | 'boolean' | 'json';
-  category?: string;
-  description?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface UserSettingsCategory {
-  category: string;
-  description: string;
-  settings: string[];
-}
+import { UserSetting, UserSettingsCategory } from '../../shared/types';
 
 /**
  * 用户设置模块服务，负责设置的读取、保存、更新、删除与分组管理

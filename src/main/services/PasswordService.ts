@@ -1,26 +1,5 @@
 import type Database from 'better-sqlite3';
-
-export interface PasswordItem {
-  id?: number;
-  title: string;
-  username: string;
-  password?: string | null;
-  url?: string | null;
-  notes?: string | null;
-  multi_accounts?: string | null;
-  group_id?: number | null;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface PasswordHistory {
-  id?: number;
-  password_id: number;
-  old_password: string;
-  new_password: string;
-  changed_at: string;
-  changed_reason?: string;
-}
+import { PasswordItem, PasswordHistory } from '../../shared/types';
 
 export interface CryptoAdapter {
   encrypt(text: string): string;
@@ -42,24 +21,14 @@ export class PasswordService {
 
   /** 获取密码列表（可选按分组过滤），自动解密敏感字段 */
   public getPasswords(groupId?: number): PasswordItem[] {
-    let stmt;
-    if (groupId) {
-      stmt = this.db.prepare('SELECT * FROM passwords WHERE group_id = ? ORDER BY created_at DESC');
-      const rows = stmt.all(groupId) as PasswordItem[];
-      return rows.map(p => ({
-        ...p,
-        password: p.password ? this.crypto.decrypt(p.password) : '',
-        multi_accounts: p.multi_accounts ? this.crypto.decrypt(p.multi_accounts) : undefined
-      }));
-    } else {
-      stmt = this.db.prepare('SELECT * FROM passwords ORDER BY created_at DESC');
-      const rows = stmt.all() as PasswordItem[];
-      return rows.map(p => ({
-        ...p,
-        password: p.password ? this.crypto.decrypt(p.password) : '',
-        multi_accounts: p.multi_accounts ? this.crypto.decrypt(p.multi_accounts) : undefined
-      }));
-    }
+    const stmt = groupId
+      ? this.db.prepare('SELECT * FROM passwords WHERE group_id = ? ORDER BY created_at DESC')
+      : this.db.prepare('SELECT * FROM passwords ORDER BY created_at DESC');
+    const rows = (groupId ? stmt.all(groupId) : stmt.all()) as PasswordItem[];
+    return rows.map(p => ({
+      ...p,
+      password: p.password ? this.crypto.decrypt(p.password) : ''
+    }));
   }
 
   public savePasswordFromUI(password: PasswordItem): number {
@@ -73,13 +42,12 @@ export class PasswordService {
     const now = new Date().toISOString();
     const hasSinglePassword = !!(password.password && password.password.trim() !== '');
     const encryptedPassword = hasSinglePassword ? this.crypto.encrypt(password.password!) : null;
-    const encryptedMultiAccounts = password.multi_accounts ? this.crypto.encrypt(password.multi_accounts) : null;
 
     if (password.id) {
-      const existing = this.db.prepare('SELECT id, password, multi_accounts FROM passwords WHERE id = ?').get(password.id) as { id: number; password: string; multi_accounts?: string } | undefined;
+      const existing = this.db.prepare('SELECT id, password FROM passwords WHERE id = ?').get(password.id) as { id: number; password: string } | undefined;
       if (!existing) throw new Error('指定的密码不存在');
       const stmt = this.db.prepare(
-        `UPDATE passwords SET title = ?, username = ?, password = ?, url = ?, notes = ?, multi_accounts = ?, group_id = ?, updated_at = ? WHERE id = ?`
+        `UPDATE passwords SET title = ?, username = ?, password = ?, url = ?, notes = ?, group_id = ?, updated_at = ? WHERE id = ?`
       );
       stmt.run(
         password.title,
@@ -87,7 +55,6 @@ export class PasswordService {
         encryptedPassword ?? existing.password,
         password.url || null,
         password.notes || null,
-        encryptedMultiAccounts ?? (existing.multi_accounts ?? null),
         password.group_id || null,
         now,
         password.id
@@ -98,7 +65,7 @@ export class PasswordService {
       return password.id;
     } else {
       const stmt = this.db.prepare(
-        `INSERT INTO passwords (title, username, password, url, notes, multi_accounts, group_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO passwords (title, username, password, url, notes, group_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       );
       const result = stmt.run(
         password.title,
@@ -106,7 +73,6 @@ export class PasswordService {
         encryptedPassword,
         password.url || null,
         password.notes || null,
-        encryptedMultiAccounts,
         password.group_id || null,
         now,
         now
@@ -129,7 +95,7 @@ export class PasswordService {
       const existing = this.db.prepare('SELECT id FROM passwords WHERE id = ?').get(password.id) as { id: number } | undefined;
       if (existing) {
         const stmt = this.db.prepare(
-          `UPDATE passwords SET title = ?, username = ?, password = ?, url = ?, notes = ?, multi_accounts = ?, group_id = ?, updated_at = ? WHERE id = ?`
+          `UPDATE passwords SET title = ?, username = ?, password = ?, url = ?, notes = ?, group_id = ?, updated_at = ? WHERE id = ?`
         );
         stmt.run(
           password.title,
@@ -137,7 +103,6 @@ export class PasswordService {
           password.password ?? null,
           password.url || null,
           password.notes || null,
-          password.multi_accounts ?? null,
           password.group_id || null,
           now,
           password.id
@@ -145,7 +110,7 @@ export class PasswordService {
         return password.id;
       } else {
         const stmt = this.db.prepare(
-          `INSERT INTO passwords (id, title, username, password, url, notes, multi_accounts, group_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO passwords (id, title, username, password, url, notes, group_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
         );
         const result = stmt.run(
           password.id,
@@ -154,7 +119,6 @@ export class PasswordService {
           password.password ?? null,
           password.url || null,
           password.notes || null,
-          password.multi_accounts ?? null,
           password.group_id || null,
           now,
           now
@@ -163,7 +127,7 @@ export class PasswordService {
       }
     } else {
       const stmt = this.db.prepare(
-        `INSERT INTO passwords (title, username, password, url, notes, multi_accounts, group_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO passwords (title, username, password, url, notes, group_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
       );
       const result = stmt.run(
         password.title,
@@ -171,7 +135,6 @@ export class PasswordService {
         password.password ?? null,
         password.url || null,
         password.notes || null,
-        password.multi_accounts ?? null,
         password.group_id || null,
         now,
         now
@@ -243,8 +206,7 @@ export class PasswordService {
     const rows = this.db.prepare('SELECT * FROM passwords WHERE updated_at < ? ORDER BY updated_at ASC').all(d.toISOString()) as PasswordItem[];
     return rows.map(p => ({
       ...p,
-      password: p.password ? this.crypto.decrypt(p.password) : '',
-      multi_accounts: p.multi_accounts ? this.crypto.decrypt(p.multi_accounts) : undefined
+      password: p.password ? this.crypto.decrypt(p.password) : ''
     }));
   }
 
@@ -257,8 +219,7 @@ export class PasswordService {
     const rows = stmt.all(q) as PasswordItem[];
     return rows.map(p => ({
       ...p,
-      password: p.password ? this.crypto.decrypt(p.password) : '',
-      multi_accounts: p.multi_accounts ? this.crypto.decrypt(p.multi_accounts) : undefined
+      password: p.password ? this.crypto.decrypt(p.password) : ''
     }));
   }
 
@@ -290,8 +251,7 @@ export class PasswordService {
     const rows = this.db.prepare(query).all(...params) as PasswordItem[];
     return rows.map(p => ({
       ...p,
-      password: p.password ? this.crypto.decrypt(p.password) : '',
-      multi_accounts: p.multi_accounts ? this.crypto.decrypt(p.multi_accounts) : undefined
+      password: p.password ? this.crypto.decrypt(p.password) : ''
     }));
   }
 
@@ -301,24 +261,10 @@ export class PasswordService {
     if (!row) return null;
     return {
       ...row,
-      password: row.password ? this.crypto.decrypt(row.password) : '',
-      multi_accounts: row.multi_accounts ? this.crypto.decrypt(row.multi_accounts) : undefined
+      password: row.password ? this.crypto.decrypt(row.password) : ''
     };
   }
 
-  /** 获取/设置多账号信息（文本，解密/加密） */
-  public getPasswordMultiAccounts(id: number): string | null {
-    const res = this.db.prepare('SELECT multi_accounts FROM passwords WHERE id = ?').get(id) as { multi_accounts: string } | undefined;
-    if (!res || !res.multi_accounts) return null;
-    return this.crypto.decrypt(res.multi_accounts);
-  }
-
-  /** 设置多账号信息（加密存储并更新时间） */
-  public setPasswordMultiAccounts(id: number, accounts: string): void {
-    const enc = this.crypto.encrypt(accounts);
-    const now = new Date().toISOString();
-    this.db.prepare('UPDATE passwords SET multi_accounts = ?, updated_at = ? WHERE id = ?').run(enc, now, id);
-  }
 
   /** 更新单个密码并记录历史（加密新密码） */
   public updatePassword(id: number, newPassword: string, reason?: string): void {
@@ -344,11 +290,9 @@ export class PasswordService {
     if (!password.username || password.username.trim().length === 0) throw new Error('用户名不能为空');
     if (password.username.length > 255) throw new Error('用户名长度不能超过255个字符');
     const hasSingle = !!(password.password && password.password.trim().length > 0);
-    const hasMulti = !!(password.multi_accounts && String(password.multi_accounts).trim().length > 0);
-    if (!hasSingle && !hasMulti && !password.id) throw new Error('密码不能为空');
+    if (!hasSingle && !password.id) throw new Error('密码不能为空');
     if (password.url && password.url.length > 2048) throw new Error('URL长度不能超过2048个字符');
     if (password.notes && password.notes.length > 10000) throw new Error('备注长度不能超过10000个字符');
-    if (password.multi_accounts && String(password.multi_accounts).length > 50000) throw new Error('多账号信息长度不能超过50000个字符');
 
   }
 

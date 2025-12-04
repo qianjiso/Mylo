@@ -1,27 +1,16 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useNotes } from '../hooks/useNotes';
+import * as notesService from '../services/notes';
 import { Button, Table, Modal, Form, Input, Select, Space, Tag, message } from 'antd';
+import type { SecureRecord, SecureRecordGroup } from '../../shared/types';
 import type { InputRef } from 'antd';
 
-interface NoteGroup {
-  id?: number;
-  name: string;
-  parent_id?: number | null;
-  color?: string;
-}
-
-interface NoteRecord {
-  id?: number;
-  title?: string | null;
-  content_ciphertext: string;
-  group_id?: number | null;
-  pinned?: boolean;
-  archived?: boolean;
-  created_at?: string;
-  updated_at?: string;
-}
+type NoteGroup = SecureRecordGroup;
+type NoteRecord = SecureRecord;
 
 const NoteManager: React.FC<{ onClose: () => void; selectedGroupId?: number; externalGroups?: NoteGroup[]; hideTopFilter?: boolean; createSignal?: number; openNoteId?: number; openSignal?: number; createTemplate?: string; templateSignal?: number }> = ({ onClose: _onClose, selectedGroupId: selectedGroupIdProp, externalGroups, hideTopFilter, createSignal, openNoteId, openSignal, createTemplate, templateSignal }) => {
-  const [groups, setGroups] = useState<NoteGroup[]>(externalGroups || []);
+  const { noteGroups, loadNoteGroups } = useNotes();
+  const groups: NoteGroup[] = externalGroups ?? (noteGroups as any);
   const [notes, setNotes] = useState<NoteRecord[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<number | undefined>(selectedGroupIdProp);
   const [loading, setLoading] = useState(false);
@@ -33,48 +22,42 @@ const NoteManager: React.FC<{ onClose: () => void; selectedGroupId?: number; ext
   const [selectedLineSet, setSelectedLineSet] = useState<Set<number>>(new Set());
   const titleInputRef = useRef<InputRef>(null);
 
-  const loadGroups = async () => {
+  const loadGroups = useCallback(async () => {
     try {
       if (externalGroups && externalGroups.length >= 0) {
-        setGroups(externalGroups);
         return;
       }
-      const res = await window.electronAPI.getNoteGroups();
-      setGroups(res || []);
+      await loadNoteGroups();
     } catch (e) {
       message.error('加载分组失败');
     }
-  };
+  }, [externalGroups, loadNoteGroups]);
 
-  const loadNotes = async (groupId?: number) => {
+  const loadNotes = useCallback(async (groupId?: number) => {
     setLoading(true);
     try {
-      const res = await window.electronAPI.getNotes(groupId);
+      const res = await notesService.listNotes(groupId);
       setNotes(res || []);
     } catch (e) {
       message.error('加载便笺失败');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadGroups();
     loadNotes(selectedGroupIdProp);
-  }, []);
+  }, [loadGroups, loadNotes, selectedGroupIdProp]);
 
   useEffect(() => {
     if (typeof selectedGroupIdProp !== 'undefined') {
       setSelectedGroupId(selectedGroupIdProp);
       loadNotes(selectedGroupIdProp);
     }
-  }, [selectedGroupIdProp]);
+  }, [selectedGroupIdProp, loadNotes]);
 
-  useEffect(() => {
-    if (externalGroups && externalGroups.length >= 0) {
-      setGroups(externalGroups);
-    }
-  }, [externalGroups]);
+  
 
   useEffect(() => {
     if (createSignal) {
@@ -96,7 +79,7 @@ const NoteManager: React.FC<{ onClose: () => void; selectedGroupId?: number; ext
     if (typeof openSignal !== 'undefined' && typeof openNoteId === 'number') {
       (async () => {
         try {
-          const note = await window.electronAPI.getNote(openNoteId);
+          const note = await notesService.getNote(openNoteId);
           if (note) {
             setEditingNote(note);
             setEditVisible(true);
@@ -134,12 +117,12 @@ const NoteManager: React.FC<{ onClose: () => void; selectedGroupId?: number; ext
   const handleDelete = async (id?: number) => {
     if (!id) return;
     try {
-      const res = await window.electronAPI.deleteNote(id);
+      const res = await notesService.removeNote(id);
       if (res.success) {
         message.success('删除成功');
         loadNotes(selectedGroupId);
       } else {
-        message.error(res.error || '删除失败');
+        message.error((res as any).error || '删除失败');
       }
     } catch (e) {
       message.error('删除失败');
@@ -149,10 +132,10 @@ const NoteManager: React.FC<{ onClose: () => void; selectedGroupId?: number; ext
   const handleSubmit = async (values: any) => {
     try {
       if (editingNote && editingNote.id) {
-        const res = await window.electronAPI.updateNote(editingNote.id, values);
+        const res = await notesService.updateNote(editingNote.id, values);
         if (res.success) message.success('更新成功'); else message.error(res.error || '更新失败');
       } else {
-        const res = await window.electronAPI.addNote(values);
+        const res = await notesService.createNote(values);
         if (res.success) message.success('添加成功'); else message.error(res.error || '添加失败');
       }
       setEditVisible(false);

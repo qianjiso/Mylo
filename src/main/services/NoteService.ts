@@ -1,25 +1,5 @@
 import type Database from 'better-sqlite3';
-
-export interface SecureRecordGroup {
-  id?: number;
-  name: string;
-  parent_id?: number | null;
-  color?: string;
-  sort_order?: number;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface SecureRecord {
-  id?: number;
-  title?: string | null;
-  content_ciphertext: string;
-  group_id?: number | null;
-  pinned?: boolean;
-  archived?: boolean;
-  created_at?: string;
-  updated_at?: string;
-}
+import { SecureRecordGroup, SecureRecord } from '../../shared/types';
 
 export interface CryptoAdapter {
   encrypt(text: string): string;

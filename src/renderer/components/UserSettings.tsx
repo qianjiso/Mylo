@@ -13,8 +13,12 @@ import {
   Col,
   InputNumber
 } from 'antd';
-import { SaveOutlined, ReloadOutlined } from '@ant-design/icons';
-import type { UserSetting } from '../../main/preload';
+import { SaveOutlined, ReloadOutlined, SafetyCertificateOutlined, ToolOutlined, CloudDownloadOutlined, CloudUploadOutlined, CheckCircleOutlined, ToolTwoTone } from '@ant-design/icons';
+import type { UserSetting } from '../../shared/types';
+import * as settingsService from '../services/settings';
+import ImportExportModal from './ImportExportModal';
+import { useBackup } from '../hooks/useBackup';
+import { useIntegrity } from '../hooks/useIntegrity';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -26,13 +30,16 @@ interface UserSettingsProps {
 const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const [exportModalVisible, setExportModalVisible] = useState(false);
+  const { exporting, exportData } = useBackup();
+  const { checking, repairing, report, repairResult, check, repair } = useIntegrity();
   
 
 useEffect(() => {
   const load = async () => {
     try {
       setLoading(true);
-      const settingsData = await window.electronAPI.getUserSettings();
+      const settingsData = await settingsService.listSettings();
       const formData: Record<string, any> = {};
       settingsData.forEach((setting: UserSetting) => {
         if (setting.type === 'boolean') {
@@ -61,7 +68,7 @@ useEffect(() => {
       
       // 保存每个设置项
       for (const [key, value] of Object.entries(values)) {
-        await window.electronAPI.setUserSetting(key, String(value));
+        await settingsService.setSetting(key, String(value));
       }
       
       message.success('设置保存成功');
@@ -77,9 +84,9 @@ useEffect(() => {
   const handleReset = async () => {
     try {
       setLoading(true);
-      const res = await window.electronAPI.resetAllSettingsToDefault();
+      const res = await settingsService.resetAllSettingsToDefault();
       if (!res.success) throw new Error(res.error || '重置失败');
-      const settingsData = await window.electronAPI.getUserSettings();
+      const settingsData = await settingsService.listSettings();
       const formData: Record<string, any> = {};
       settingsData.forEach((setting: UserSetting) => {
         if (setting.type === 'boolean') formData[setting.key] = setting.value === 'true';
@@ -93,6 +100,47 @@ useEffect(() => {
       message.error('重置设置失败');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleQuickExport = async () => {
+    try {
+      const data = await exportData({ format: 'json' });
+      const blob = new Blob([data as unknown as BlobPart], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `passwords_backup_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      message.success('已导出 JSON 备份');
+    } catch (error) {
+      console.error('快速导出失败:', error);
+      message.error('快速导出失败');
+    }
+  };
+
+  const handleCheckIntegrity = async () => {
+    try {
+      const r = await check();
+      const errCount = r.errors.length;
+      const warnCount = r.warnings.length;
+      message.success(`完整性检查完成，错误 ${errCount}，警告 ${warnCount}`);
+    } catch (error) {
+      console.error('完整性检查失败:', error);
+      message.error('完整性检查失败');
+    }
+  };
+
+  const handleRepairIntegrity = async () => {
+    try {
+      const r = await repair();
+      message.success(`修复完成：${r.repaired.length} 条修复，${r.failed.length} 条失败`);
+    } catch (error) {
+      console.error('完整性修复失败:', error);
+      message.error('完整性修复失败');
     }
   };
 
@@ -291,6 +339,68 @@ useEffect(() => {
           </Row>
         </Card>
 
+        {/* 备份与完整性 */}
+        <Card title="备份与完整性" style={{ marginBottom: '16px' }}>
+          <Space wrap>
+            <Button icon={<CloudDownloadOutlined />} onClick={handleQuickExport} loading={exporting}>
+              快速导出（JSON）
+            </Button>
+            <Button icon={<CloudUploadOutlined />} onClick={() => setExportModalVisible(true)}>
+              打开导入/导出窗口
+            </Button>
+            <Button icon={<SafetyCertificateOutlined />} onClick={handleCheckIntegrity} loading={checking}>
+              检查数据完整性
+            </Button>
+            <Button icon={<ToolOutlined />} onClick={handleRepairIntegrity} loading={repairing}>
+              修复数据完整性
+            </Button>
+          </Space>
+
+          <Divider />
+          <Row gutter={16}>
+            <Col span={12}>
+              <Title level={5}>
+                <CheckCircleOutlined /> 检查结果
+              </Title>
+              <div style={{ maxHeight: 200, overflow: 'auto', border: '1px solid #f0f0f0', padding: 8 }}>
+                {report ? (
+                  <div>
+                    <div>错误 {report.errors.length}，警告 {report.warnings.length}</div>
+                    {report.errors.map((e, idx) => (
+                      <div key={`err-${idx}`} style={{ color: '#cf1322' }}>{e}</div>
+                    ))}
+                    {report.warnings.map((w, idx) => (
+                      <div key={`warn-${idx}`} style={{ color: '#faad14' }}>{w}</div>
+                    ))}
+                  </div>
+                ) : (
+                  <div>尚未执行检查</div>
+                )}
+              </div>
+            </Col>
+            <Col span={12}>
+              <Title level={5}>
+                <ToolTwoTone twoToneColor="#52c41a" /> 修复结果
+              </Title>
+              <div style={{ maxHeight: 200, overflow: 'auto', border: '1px solid #f0f0f0', padding: 8 }}>
+                {repairResult ? (
+                  <div>
+                    <div>已修复 {repairResult.repaired.length}，失败 {repairResult.failed.length}</div>
+                    {repairResult.repaired.map((r, idx) => (
+                      <div key={`rep-${idx}`} style={{ color: '#52c41a' }}>{r}</div>
+                    ))}
+                    {repairResult.failed.map((f, idx) => (
+                      <div key={`fail-${idx}`} style={{ color: '#cf1322' }}>{f}</div>
+                    ))}
+                  </div>
+                ) : (
+                  <div>尚未执行修复</div>
+                )}
+              </div>
+            </Col>
+          </Row>
+        </Card>
+
         {/* 操作按钮 */}
         <div style={{ textAlign: 'center', marginTop: '24px' }}>
           <Space size="large">
@@ -313,6 +423,7 @@ useEffect(() => {
           </Space>
         </div>
       </Form>
+      <ImportExportModal visible={exportModalVisible} onClose={() => setExportModalVisible(false)} />
     </div>
   );
 };

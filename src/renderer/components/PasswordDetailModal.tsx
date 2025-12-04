@@ -70,7 +70,7 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
       }
       setShowPassword(false);
     }
-  }, [visible, mode, form]);
+  }, [visible, mode, form, password?.group_id]);
 
   const handleSave = async () => {
     try {

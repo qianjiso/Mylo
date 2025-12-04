@@ -9,6 +9,7 @@ import {
   Upload,
   message,
 } from 'antd';
+import * as backupService from '../services/backup';
 import {
   DownloadOutlined,
   UploadOutlined,
@@ -42,28 +43,19 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
       setLoading(true);
       const values = await exportForm.validateFields();
       
-      const result = await window.electronAPI.exportData(values);
-      
-      if (result.success && result.data) {
-        // 创建下载链接
-        const uint8Array = new Uint8Array(result.data);
-        const blob = new Blob([uint8Array], { 
-          type: values.format === 'json' ? 'application/json' : 'application/octet-stream'
-        });
-        
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `passwords_backup_${new Date().toISOString().split('T')[0]}.${values.format === 'json' ? 'json' : 'zip'}`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        
-        message.success('数据导出成功');
-      } else {
-        message.error(result.error || '导出失败');
-      }
+      const data = await backupService.exportData(values as any);
+      const blob = new Blob([data as unknown as BlobPart], { 
+        type: values.format === 'json' ? 'application/json' : 'application/octet-stream'
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `passwords_backup_${new Date().toISOString().split('T')[0]}.${values.format === 'json' ? 'json' : 'zip'}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      message.success('数据导出成功');
     } catch (error) {
       console.error('Export error:', error);
       message.error('导出过程中发生错误');
@@ -87,18 +79,13 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
       const arrayBuffer = await uploadFile.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
       
-      const result = await window.electronAPI.importData(Array.from(uint8Array), {
+      const result = await backupService.importData(uint8Array, {
         format: fmt,
         mergeStrategy: 'merge',
         validateIntegrity: false,
         dryRun: false
       });
-      
-      if (result.success) {
-        message.success(`导入成功，共处理 ${result.data?.imported || 0} 条记录`);
-      } else {
-        message.error(result.error || '导入失败');
-      }
+      message.success(`导入成功，共处理 ${result.imported || 0} 条记录`);
     } catch (error) {
       console.error('Import error:', error);
       message.error('导入过程中发生错误');

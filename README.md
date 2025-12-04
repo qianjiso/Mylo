@@ -212,7 +212,7 @@ npm run dist:linux
 
 - `src/shared/security/crypto.ts` 使用 PBKDF2（salt='salt', 10000次）派生 32 字节密钥
 - AES-256-CBC 加密（随机 IV，格式 `ivHex:cipherHex`），主进程统一调用
-- 加密字段：`passwords.password`、`passwords.multi_accounts`、`password_history.old_password/new_password`
+- 加密字段：`passwords.password`、`password_history.old_password/new_password`
 
 ## 🤝 贡献指南
 
