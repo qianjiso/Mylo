@@ -34,7 +34,6 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
   const [loading, setLoading] = useState(false);
   // 预览已取消
   const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [archivePwd, setArchivePwd] = useState('');
   
 
   // 导出数据

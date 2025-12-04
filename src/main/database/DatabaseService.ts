@@ -808,11 +808,13 @@ export class DatabaseService {
           app_name: 'Password Manager'
         };
 
-        // 导出密码数据（敏感字段保持加密）
+        // 导出密码数据（按需求输出明文密码；多账号仍保持原策略）
         const passwords = this.getPasswords();
         exportData.passwords = passwords.map(password => ({
           ...password,
-          password: password.password ? this.encrypt(password.password) : null,
+          // 明文输出密码
+          password: password.password ? password.password : null,
+          // 仍按原策略处理多账号字段（保持加密）
           multi_accounts: password.multi_accounts ? this.encrypt(password.multi_accounts) : null
         }));
 

@@ -168,7 +168,32 @@ const NoteManager: React.FC<{ onClose: () => void; selectedGroupId?: number; ext
       const g = groups.find(x => x.id === gid);
       return g ? <Tag color={g.color || '蓝色'}>{g.name}</Tag> : '-';
     } },
-    { title: '更新时间', dataIndex: 'updated_at', key: 'updated_at' },
+    { title: '创建时间', dataIndex: 'created_at', key: 'created_at', render: (t: string) => {
+      const fmt = (s?: string) => {
+        if (!s) return '-';
+        const d = new Date(s);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        return `${y}-${m}-${day} ${hh}:${mm}`;
+      };
+      return <span title={t}>{fmt(t)}</span>;
+    } },
+    { title: '更新时间', dataIndex: 'updated_at', key: 'updated_at', render: (t: string) => {
+      const fmt = (s?: string) => {
+        if (!s) return '-';
+        const d = new Date(s);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        return `${y}-${m}-${day} ${hh}:${mm}`;
+      };
+      return <span title={t}>{fmt(t)}</span>;
+    } },
     { title: '操作', key: 'action', render: (_: any, record: NoteRecord) => (
       <Space>
         <Button type="link" onClick={() => {
