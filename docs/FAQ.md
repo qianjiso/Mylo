@@ -44,6 +44,7 @@ sqlite3 passwords.db "select * from passwords"
 sqlite3 passwords.db "select * from groups"
 sqlite3 passwords.db "select * from secure_record_groups"
 sqlite3 passwords.db "select * from secure_records"
+sqlite3 passwords.db "select * from password_history"
 ```
 
 # 6.代码执行链路
