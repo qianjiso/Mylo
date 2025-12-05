@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron';
 import * as path from 'path';
 import DatabaseService from './database/DatabaseService';
 import { initLogger, getLogFilePath } from './logger';
@@ -151,6 +151,14 @@ class PasswordManagerApp {
     });
     ipcMain.handle('window-close', async () => {
       this.mainWindow?.close();
+    });
+    ipcMain.handle('open-external', async (_e, url: string) => {
+      if (!url || typeof url !== 'string') return;
+      try {
+        await shell.openExternal(url);
+      } catch (err) {
+        console.error('open-external failed', err);
+      }
     });
   }
 

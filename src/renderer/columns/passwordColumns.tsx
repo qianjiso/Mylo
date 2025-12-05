@@ -42,7 +42,39 @@ export function buildPasswordColumns(
 ): ColumnsType<PasswordRow> {
   return [
     { title: '标题', dataIndex: 'title', key: 'title', sorter: (a, b) => a.title.localeCompare(b.title) },
-    { title: '用户名', dataIndex: 'username', key: 'username' },
+    {
+      title: '用户名',
+      dataIndex: 'username',
+      key: 'username',
+      render: (text: string) => {
+        if (!text) return '-';
+        const copy = async () => {
+          try {
+            await navigator.clipboard.writeText(text);
+            message.success('用户名已复制');
+          } catch {
+            message.error('复制失败');
+          }
+        };
+        return (
+          <Tooltip title={text}>
+            <span
+              onClick={copy}
+              style={{
+                maxWidth: 220,
+                display: 'inline-block',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                cursor: 'copy'
+              }}
+            >
+              {text}
+            </span>
+          </Tooltip>
+        );
+      }
+    },
     {
       title: '密码',
       dataIndex: 'password',
@@ -76,7 +108,40 @@ export function buildPasswordColumns(
       title: 'URL',
       dataIndex: 'url',
       key: 'url',
-      render: (text: string) => (text ? <a href={text} target="_blank" rel="noopener noreferrer">{text}</a> : '-'),
+      render: (text: string) => {
+        if (!text) return '-';
+        const isHttp = /^https?:\/\//i.test(text);
+        const open = async () => {
+          try {
+            if (isHttp && window.electronAPI?.openExternal) {
+              await window.electronAPI.openExternal(text);
+            } else {
+              await navigator.clipboard.writeText(text);
+              message.success('URL已复制');
+            }
+          } catch {
+            message.error('操作失败');
+          }
+        };
+        return (
+          <Tooltip title={text}>
+            <span
+              onClick={open}
+              style={{
+                maxWidth: 300,
+                display: 'inline-block',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                color: '#1677ff',
+                cursor: 'pointer'
+              }}
+            >
+              {text}
+            </span>
+          </Tooltip>
+        );
+      }
     },
     {
       title: '分组',
