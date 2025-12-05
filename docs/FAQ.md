@@ -70,6 +70,7 @@ npx electron-builder install-app-deps
 - 应用启动日志写入 ~/Library/Application Support/Mylo/electron.log
 
 ## 9. 应用数据位置（MAC电脑）
+`开发态的数据与应用目录 ~/Library/Application Support/Mylo-dev`
 ### 数据位置
 1. 用户数据目录： ~/Library/Application\ Support/Mylo
     - 数据库文件： ~/Library/Application\ Support/Mylo/passwords.db

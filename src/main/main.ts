@@ -14,6 +14,16 @@ class PasswordManagerApp {
   private databaseService: DatabaseService | null = null;
 
   constructor() {
+    try {
+      if (!app.isPackaged) {
+        const def = app.getPath('userData');
+        const devPath = path.join(path.dirname(def), `${path.basename(def)}-dev`);
+        app.setPath('userData', devPath);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn('set userData failed', msg);
+    }
     initLogger();
     console.info('app starting');
     this.init();
