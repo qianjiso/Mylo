@@ -425,7 +425,8 @@ const App: React.FC = () => {
     togglePasswordVisibility,
     (row) => handleViewHistory(row as any),
     (row) => handleEdit(row as any),
-    (id) => handleDelete(id)
+    (id) => handleDelete(id),
+    passwords as any
   ) as any;
 
   const historyColumns = buildHistoryColumns(
@@ -511,7 +512,7 @@ const App: React.FC = () => {
         </Sider>
         
         <Layout style={{ padding: '24px' }}>
-          <Content style={{ background: '#fff', padding: '24px', borderRadius: '8px' }}>
+          <Content style={{ background: '#fff', padding: '22px', borderRadius: '8px' }}>
             {currentModule === 'password' ? (
               <>
                 <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -520,7 +521,15 @@ const App: React.FC = () => {
                   </h2>
                   <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>添加密码</Button>
                 </div>
-                <Table columns={columns} dataSource={passwords} rowKey="id" loading={loading} pagination={{ total: passwords.length, pageSize: 10, showSizeChanger: true, showQuickJumper: true, showTotal: (total) => `共 ${total} 条记录` }} />
+                <Table 
+                  columns={columns} 
+                  dataSource={passwords} 
+                  rowKey="id" 
+                  loading={loading} 
+                  tableLayout="fixed"
+                  scroll={{ x: 'max-content' }}
+                  pagination={{ total: passwords.length, pageSize: 10, showSizeChanger: true, showQuickJumper: true, showTotal: (total) => `共 ${total} 条记录` }} 
+                />
               </>
             ) : (
               <>

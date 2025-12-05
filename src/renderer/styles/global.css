@@ -375,4 +375,6 @@ html, body {
 }
 .ant-table-cell {
   white-space: nowrap;
+  padding-left: 10px;
+  padding-right: 10px;
 }

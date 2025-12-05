@@ -31,6 +31,18 @@ export class PasswordService {
     }));
   }
 
+  /** 按多个分组ID获取密码列表（包含子分组），自动解密 */
+  public getPasswordsByGroupIds(groupIds: number[]): PasswordItem[] {
+    if (!groupIds || groupIds.length === 0) return this.getPasswords(undefined);
+    const placeholders = groupIds.map(() => '?').join(',');
+    const stmt = this.db.prepare(`SELECT * FROM passwords WHERE group_id IN (${placeholders}) ORDER BY created_at DESC`);
+    const rows = stmt.all(...groupIds) as PasswordItem[];
+    return rows.map(p => ({
+      ...p,
+      password: p.password ? this.crypto.decrypt(p.password) : ''
+    }));
+  }
+
   public savePasswordFromUI(password: PasswordItem): number {
     this.validatePassword(password);
 
@@ -40,12 +52,20 @@ export class PasswordService {
     }
 
     const now = new Date().toISOString();
-    const hasSinglePassword = !!(password.password && password.password.trim() !== '');
-    const encryptedPassword = hasSinglePassword ? this.crypto.encrypt(password.password!) : null;
+    const hasInput = !!(password.password && password.password.trim() !== '');
 
     if (password.id) {
-      const existing = this.db.prepare('SELECT id, password FROM passwords WHERE id = ?').get(password.id) as { id: number; password: string } | undefined;
+      const existing = this.db.prepare('SELECT id, password FROM passwords WHERE id = ?').get(password.id) as { id: number; password: string | null } | undefined;
       if (!existing) throw new Error('指定的密码不存在');
+      let encryptedPassword: string | null = null;
+      let changed = false;
+      if (hasInput) {
+        const existingPlain = existing.password ? this.crypto.decrypt(existing.password) : '';
+        changed = existingPlain !== (password.password || '');
+        if (changed) {
+          encryptedPassword = this.crypto.encrypt(password.password!);
+        }
+      }
       const stmt = this.db.prepare(
         `UPDATE passwords SET title = ?, username = ?, password = ?, url = ?, notes = ?, group_id = ?, updated_at = ? WHERE id = ?`
       );
@@ -59,8 +79,8 @@ export class PasswordService {
         now,
         password.id
       );
-      if (encryptedPassword && existing.password !== encryptedPassword) {
-        this.savePasswordHistory(password.id, existing.password, encryptedPassword, undefined);
+      if (changed && encryptedPassword) {
+        this.savePasswordHistory(password.id, existing.password!, encryptedPassword, undefined);
       }
       return password.id;
     } else {
@@ -70,7 +90,7 @@ export class PasswordService {
       const result = stmt.run(
         password.title,
         password.username,
-        encryptedPassword,
+        hasInput ? this.crypto.encrypt(password.password!) : null,
         password.url || null,
         password.notes || null,
         password.group_id || null,
@@ -268,12 +288,14 @@ export class PasswordService {
 
   /** 更新单个密码并记录历史（加密新密码） */
   public updatePassword(id: number, newPassword: string, reason?: string): void {
-    const oldRow = this.db.prepare('SELECT password FROM passwords WHERE id = ?').get(id) as { password: string } | undefined;
+    const oldRow = this.db.prepare('SELECT password FROM passwords WHERE id = ?').get(id) as { password: string | null } | undefined;
     if (!oldRow) throw new Error('Password not found');
+    const oldPlain = oldRow.password ? this.crypto.decrypt(oldRow.password) : '';
+    if (oldPlain === newPassword) return;
     const enc = this.crypto.encrypt(newPassword);
     const now = new Date().toISOString();
     this.db.prepare('UPDATE passwords SET password = ?, updated_at = ? WHERE id = ?').run(enc, now, id);
-    this.savePasswordHistory(id, oldRow.password, enc, reason);
+    this.savePasswordHistory(id, oldRow.password!, enc, reason);
   }
 
   /** 内部：保存历史（保持加密态） */

@@ -91,6 +91,18 @@ export default class NoteService {
     }));
   }
 
+  /** 按多个分组ID获取便笺（包含子分组），自动解密 */
+  public getNotesByGroupIds(groupIds: number[]): SecureRecord[] {
+    if (!groupIds || groupIds.length === 0) return this.getNotes(undefined);
+    const placeholders = groupIds.map(() => '?').join(',');
+    const stmt = this.db.prepare(`SELECT * FROM secure_records WHERE group_id IN (${placeholders}) ORDER BY updated_at DESC`);
+    const rows = stmt.all(...groupIds) as SecureRecord[];
+    return rows.map(r => ({
+      ...r,
+      content_ciphertext: this.crypto.decrypt(r.content_ciphertext)
+    }));
+  }
+
   public getNoteById(id: number): SecureRecord | null {
     const row = this.db.prepare('SELECT * FROM secure_records WHERE id = ?').get(id) as SecureRecord | undefined;
     if (!row) return null;

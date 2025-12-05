@@ -646,9 +646,42 @@ export class DatabaseService {
     }
   }
 
+  /**
+   * 收集指定分组及其所有子分组的ID（去重、包含自身）
+   */
+  private collectDescendantIds(nodes: Array<{ id: number; parent_id: number | null }>, rootId: number): number[] {
+    const childrenByParent = new Map<number | null, number[]>();
+    for (const n of nodes) {
+      const key = n.parent_id ?? null;
+      const arr = childrenByParent.get(key) || [];
+      arr.push(n.id);
+      childrenByParent.set(key, arr);
+    }
+
+    const result: number[] = [];
+    const stack: number[] = [rootId];
+    const visited = new Set<number>();
+
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+      if (visited.has(current)) continue;
+      visited.add(current);
+      result.push(current);
+      const children = childrenByParent.get(current) || [];
+      for (const child of children) {
+        if (!visited.has(child)) stack.push(child);
+      }
+    }
+
+    return result;
+  }
+
   // 密码相关方法
   public getPasswords(groupId?: number): PasswordItem[] {
-    return this.passwordService.getPasswords(groupId);
+    if (groupId == null) return this.passwordService.getPasswords(undefined);
+    const groups = this.groupService.getGroups();
+    const ids = this.collectDescendantIds(groups.map(g => ({ id: g.id!, parent_id: g.parent_id ?? null })), groupId);
+    return this.passwordService.getPasswordsByGroupIds(ids);
   }
 
   public savePassword(password: PasswordItem): number {
@@ -866,7 +899,10 @@ export class DatabaseService {
   }
 
   public getNotes(groupId?: number): SecureRecord[] {
-    return this.noteService.getNotes(groupId);
+    if (groupId == null) return this.noteService.getNotes(undefined);
+    const groups = this.noteService.getNoteGroups();
+    const ids = this.collectDescendantIds(groups.map(g => ({ id: g.id!, parent_id: g.parent_id ?? null })), groupId);
+    return this.noteService.getNotesByGroupIds(ids);
   }
 
   public getNoteById(id: number): SecureRecord | null {

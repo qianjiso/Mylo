@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Button, Tag, Tooltip, Space, Popconfirm, message } from 'antd';
 import { FolderOutlined, EditOutlined, DeleteOutlined, HistoryOutlined, EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -22,6 +22,51 @@ export interface GroupLite {
   icon?: string;
 }
 
+const UsernameCell: React.FC<{ text: string }> = ({ text }) => {
+  const [open, setOpen] = useState(false);
+  const at = text.indexOf('@');
+  const formatUsername = (s: string) => {
+    if (at > 0) {
+      const local = s.slice(0, at);
+      const domain = s.slice(at + 1);
+      const localShort = local.length > 12 ? `${local.slice(0, 8)}…${local.slice(-2)}` : local;
+      const parts = domain.split('.');
+      const domainShort = parts.length > 2 ? `…${parts.slice(-2).join('.')}` : (domain.length > 22 ? `${domain.slice(0, 14)}…${domain.slice(-4)}` : domain);
+      return `${localShort}@${domainShort}`;
+    }
+    if (s.length <= 18) return s;
+    return `${s.slice(0, 10)}…${s.slice(-6)}`;
+  };
+  const display = formatUsername(text);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      message.success('用户名已复制');
+    } catch {
+      message.error('复制失败');
+    }
+  };
+  return (
+    <Tooltip title={text} open={open}>
+      <div
+        onClick={copy}
+        onDoubleClick={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        style={{
+          display: 'block',
+          width: '100%',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          cursor: 'pointer'
+        }}
+      >
+        {display}
+      </div>
+    </Tooltip>
+  );
+};
+
 /**
  * 构建密码列表的列配置
  * @param groups 分组数据源（用于渲染分组标签）
@@ -38,55 +83,46 @@ export function buildPasswordColumns(
   toggleVisibility: (rowId: string) => void,
   onViewHistory: (row: PasswordRow) => void,
   onEdit: (row: PasswordRow) => void,
-  onDelete: (id: number) => void
+  onDelete: (id: number) => void,
+  rows?: PasswordRow[]
 ): ColumnsType<PasswordRow> {
+  const maxVisibleLen = (() => {
+    if (!rows || visiblePasswords.size === 0) return 0;
+    let max = 0;
+    for (const r of rows) {
+      if (visiblePasswords.has(String(r.id)) && typeof r.password === 'string') {
+        max = Math.max(max, r.password.length);
+      }
+    }
+    return max;
+  })();
+  const pwdAutoWidth = maxVisibleLen > 0 ? Math.min(600, Math.max(100, maxVisibleLen * 8 + 40)) : 100;
   return [
-    { title: '标题', dataIndex: 'title', key: 'title', sorter: (a, b) => a.title.localeCompare(b.title) },
+    { title: '标题', dataIndex: 'title', key: 'title', sorter: (a, b) => a.title.localeCompare(b.title), width: 100, ellipsis: true },
     {
       title: '用户名',
       dataIndex: 'username',
       key: 'username',
+      width: 140,
+      ellipsis: true,
       render: (text: string) => {
         if (!text) return '-';
-        const copy = async () => {
-          try {
-            await navigator.clipboard.writeText(text);
-            message.success('用户名已复制');
-          } catch {
-            message.error('复制失败');
-          }
-        };
-        return (
-          <Tooltip title={text}>
-            <span
-              onClick={copy}
-              style={{
-                maxWidth: 220,
-                display: 'inline-block',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                cursor: 'copy'
-              }}
-            >
-              {text}
-            </span>
-          </Tooltip>
-        );
+        return <UsernameCell text={text} />;
       }
     },
     {
       title: '密码',
       dataIndex: 'password',
       key: 'password',
+      width: pwdAutoWidth,
       render: (text: string, record: PasswordRow) => {
         if (!text) return '-';
         const isVisible = visiblePasswords.has(record.id.toString());
         return (
-          <Space>
-            <span style={{ fontFamily: isVisible ? 'monospace' : 'inherit' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div style={{ flex: 1, overflow: isVisible ? 'visible' : 'hidden', textOverflow: isVisible ? 'clip' : 'ellipsis', whiteSpace: 'nowrap', fontFamily: isVisible ? 'monospace' : 'inherit' }}>
               {isVisible ? text : '••••••••'}
-            </span>
+            </div>
             <Button
               type="link"
               size="small"
@@ -100,7 +136,7 @@ export function buildPasswordColumns(
                 }
               }}
             />
-          </Space>
+          </div>
         );
       },
     },
@@ -108,9 +144,32 @@ export function buildPasswordColumns(
       title: 'URL',
       dataIndex: 'url',
       key: 'url',
+      width: 150,
+      ellipsis: true,
       render: (text: string) => {
         if (!text) return '-';
         const isHttp = /^https?:\/\//i.test(text);
+        const formatDisplayUrl = (s: string) => {
+          try {
+            const u = new URL(s);
+            const isIp = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(u.hostname);
+            let hostShow: string;
+            if (isIp) {
+              hostShow = u.port ? `${u.hostname}:${u.port}` : u.hostname;
+            } else {
+              const hostParts = u.hostname.split('.');
+              const useFullHost = hostParts.length <= 3 && u.hostname.length <= 24;
+              const hostShort = useFullHost ? u.hostname : `…${hostParts.slice(-2).join('.')}`;
+              hostShow = u.port ? `${hostShort}:${u.port}` : hostShort;
+            }
+            const path = u.pathname && u.pathname !== '/' ? '/…' : '/';
+            return `${u.protocol}//${hostShow}${path}`;
+          } catch {
+            if (s.length <= 28) return s;
+            return `${s.slice(0, 20)}…${s.slice(-6)}`;
+          }
+        };
+        const display = formatDisplayUrl(text);
         const open = async () => {
           try {
             if (isHttp && window.electronAPI?.openExternal) {
@@ -124,22 +183,20 @@ export function buildPasswordColumns(
           }
         };
         return (
-          <Tooltip title={text}>
-            <span
-              onClick={open}
-              style={{
-                maxWidth: 300,
-                display: 'inline-block',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                color: '#1677ff',
-                cursor: 'pointer'
-              }}
-            >
-              {text}
-            </span>
-          </Tooltip>
+          <div
+            onClick={open}
+            style={{
+              display: 'block',
+              width: '100%',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              color: '#1677ff',
+              cursor: 'pointer'
+            }}
+          >
+            {display}
+          </div>
         );
       }
     },
@@ -147,6 +204,7 @@ export function buildPasswordColumns(
       title: '分组',
       dataIndex: 'group_id',
       key: 'group_id',
+      width: 70,
       render: (groupId: number) => {
         const group = groups.find(g => g.id === groupId);
         return group ? (
@@ -157,11 +215,12 @@ export function buildPasswordColumns(
         ) : '-';
       },
     },
-    { title: '创建时间', dataIndex: 'created_at', key: 'created_at', render: (text: string) => formatTimestamp(text) },
+    { title: '创建时间', dataIndex: 'created_at', key: 'created_at', width: 140, render: (text: string) => formatTimestamp(text) },
     {
       title: '操作',
       key: 'action',
-      width: 160,
+      width: 90,
+      fixed: 'right',
       render: (_, record) => (
         <Space size={4}>
           <Tooltip title="历史">
