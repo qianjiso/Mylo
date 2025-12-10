@@ -148,11 +148,20 @@ const App: React.FC = () => {
     form.resetFields();
   }, [selectedGroupId, form]);
 
-  const handleEdit = (record: Password) => {
-    setEditingPassword(record);
-    setPasswordDetailMode('edit');
-    setModalVisible(true);
-    form.setFieldsValue(record);
+  const handleEdit = async (record: Password) => {
+    try {
+      const full = await window.electronAPI.getPassword(record.id);
+      const pw = full || record;
+      setEditingPassword(pw as any);
+      setPasswordDetailMode('edit');
+      setModalVisible(true);
+      form.setFieldsValue(pw as any);
+    } catch {
+      setEditingPassword(record);
+      setPasswordDetailMode('edit');
+      setModalVisible(true);
+      form.setFieldsValue(record);
+    }
   };
 
 
@@ -369,7 +378,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!globalSearchVisible) return;
-    const handler = (e: KeyboardEvent) => {
+    const handler = async (e: KeyboardEvent) => {
       const k = e.key;
       if (k === 'ArrowDown') {
         if (globalSearchActiveTab === 'pw') setSelectedPwIndex(i => Math.min(i + 1, Math.max(0, globalSearchPasswords.length - 1)));
@@ -383,7 +392,12 @@ const App: React.FC = () => {
         if (globalSearchActiveTab === 'pw' && globalSearchPasswords.length) {
           const row = globalSearchPasswords[selectedPwIndex];
           setCurrentModule('password');
-          setEditingPassword(row);
+          try {
+            const full = await window.electronAPI.getPassword(row.id);
+            setEditingPassword((full || row) as any);
+          } catch {
+            setEditingPassword(row as any);
+          }
           setPasswordDetailMode('view');
           setModalVisible(true);
           setGlobalSearchVisible(false);

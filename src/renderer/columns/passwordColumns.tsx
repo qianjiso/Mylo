@@ -22,36 +22,31 @@ export interface GroupLite {
   icon?: string;
 }
 
-const UsernameCell: React.FC<{ text: string }> = ({ text }) => {
+const UsernameCell: React.FC<{ text: string; id: number }> = ({ text, id }) => {
   const [open, setOpen] = useState(false);
-  const at = text.indexOf('@');
-  const formatUsername = (s: string) => {
-    if (at > 0) {
-      const local = s.slice(0, at);
-      const domain = s.slice(at + 1);
-      const localShort = local.length > 12 ? `${local.slice(0, 8)}…${local.slice(-2)}` : local;
-      const parts = domain.split('.');
-      const domainShort = parts.length > 2 ? `…${parts.slice(-2).join('.')}` : (domain.length > 22 ? `${domain.slice(0, 14)}…${domain.slice(-4)}` : domain);
-      return `${localShort}@${domainShort}`;
-    }
-    if (s.length <= 18) return s;
-    return `${s.slice(0, 10)}…${s.slice(-6)}`;
-  };
-  const display = formatUsername(text);
-  const copy = async () => {
+  const [plain, setPlain] = useState<string | null>(null);
+  const [showPlain, setShowPlain] = useState(false);
+  const display = showPlain && plain ? plain : text;
+  const handleClick = async () => {
     try {
-      await navigator.clipboard.writeText(text);
-      message.success('用户名已复制');
+      const full = await window.electronAPI.getPassword?.(id);
+      const uname = full?.username || '';
+      if (uname) {
+        setPlain(uname);
+        setShowPlain(true);
+        await navigator.clipboard.writeText(uname);
+        message.success('用户名已复制');
+        setOpen(true);
+      }
     } catch {
       message.error('复制失败');
     }
   };
   return (
-    <Tooltip title={text} open={open}>
+    <Tooltip title={display} open={open}>
       <div
-        onClick={copy}
-        onDoubleClick={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
+        onClick={handleClick}
+        onMouseLeave={() => { setOpen(false); setShowPlain(false); }}
         style={{
           display: 'block',
           width: '100%',
@@ -105,9 +100,9 @@ export function buildPasswordColumns(
       key: 'username',
       width: 140,
       ellipsis: true,
-      render: (text: string) => {
+      render: (text: string, record: PasswordRow) => {
         if (!text) return '-';
-        return <UsernameCell text={text} />;
+        return <UsernameCell text={text} id={record.id} />;
       }
     },
     {

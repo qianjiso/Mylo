@@ -12,6 +12,38 @@ export interface CryptoAdapter {
 export class PasswordService {
   private db: Database.Database;
   private crypto: CryptoAdapter;
+  private isEnc(text: string | null | undefined): boolean {
+    if (!text) return false;
+    const parts = String(text).split(':');
+    if (parts.length !== 2) return false;
+    return /^[0-9a-f]+$/i.test(parts[0]) && /^[0-9a-f]+$/i.test(parts[1]);
+  }
+  private maskUsername(s: string): string {
+    const str = s || '';
+    if (!str) return '';
+    if (/^1[3-9]\d{9}$/.test(str)) {
+      return str.slice(0, 3) + '***' + str.slice(-3);
+    }
+    const emailIdx = str.indexOf('@');
+    if (emailIdx > 0) {
+      const local = str.slice(0, emailIdx);
+      const domain = str.slice(emailIdx + 1);
+      const keep = Math.min(3, Math.max(1, local.length > 6 ? 3 : 1));
+      const maskedLocal = local.length <= keep ? local : local.slice(0, keep) + '***';
+      return maskedLocal + '@' + domain;
+    }
+    if (/^\d{15}$/.test(str) || /^\d{17}[\dXx]$/.test(str)) {
+      const head = str.slice(0, 4);
+      const tail = str.slice(-4);
+      return head + '**********' + tail;
+    }
+    if (str.length <= 6) {
+      const head = str.slice(0, 1);
+      const tail = str.slice(-1);
+      return head + '***' + tail;
+    }
+    return str.slice(0, 3) + '***' + str.slice(-3);
+  }
 
   constructor(db: Database.Database, crypto: CryptoAdapter) {
     this.db = db;
@@ -25,10 +57,15 @@ export class PasswordService {
       ? this.db.prepare('SELECT * FROM passwords WHERE group_id = ? ORDER BY created_at DESC')
       : this.db.prepare('SELECT * FROM passwords ORDER BY created_at DESC');
     const rows = (groupId ? stmt.all(groupId) : stmt.all()) as PasswordItem[];
-    return rows.map(p => ({
-      ...p,
-      password: p.password ? this.crypto.decrypt(p.password) : ''
-    }));
+    return rows.map(p => {
+      const unameRaw = p.username;
+      const unamePlain = this.isEnc(unameRaw) ? this.crypto.decrypt(unameRaw as any) : (unameRaw || '');
+      return {
+        ...p,
+        username: this.maskUsername(unamePlain),
+        password: p.password ? this.crypto.decrypt(p.password) : ''
+      } as any;
+    });
   }
 
   /** 按多个分组ID获取密码列表（包含子分组），自动解密 */
@@ -37,10 +74,15 @@ export class PasswordService {
     const placeholders = groupIds.map(() => '?').join(',');
     const stmt = this.db.prepare(`SELECT * FROM passwords WHERE group_id IN (${placeholders}) ORDER BY created_at DESC`);
     const rows = stmt.all(...groupIds) as PasswordItem[];
-    return rows.map(p => ({
-      ...p,
-      password: p.password ? this.crypto.decrypt(p.password) : ''
-    }));
+    return rows.map(p => {
+      const unameRaw = p.username;
+      const unamePlain = this.isEnc(unameRaw) ? this.crypto.decrypt(unameRaw as any) : (unameRaw || '');
+      return {
+        ...p,
+        username: this.maskUsername(unamePlain),
+        password: p.password ? this.crypto.decrypt(p.password) : ''
+      } as any;
+    });
   }
 
   public savePasswordFromUI(password: PasswordItem): number {
@@ -71,7 +113,7 @@ export class PasswordService {
       );
       stmt.run(
         password.title,
-        password.username,
+        this.crypto.encrypt(password.username),
         encryptedPassword ?? existing.password,
         password.url || null,
         password.notes || null,
@@ -89,7 +131,7 @@ export class PasswordService {
       );
       const result = stmt.run(
         password.title,
-        password.username,
+        this.crypto.encrypt(password.username),
         hasInput ? this.crypto.encrypt(password.password!) : null,
         password.url || null,
         password.notes || null,
@@ -119,7 +161,7 @@ export class PasswordService {
         );
         stmt.run(
           password.title,
-          password.username,
+          this.isEnc(password.username) ? password.username : this.crypto.encrypt(password.username),
           password.password ?? null,
           password.url || null,
           password.notes || null,
@@ -135,7 +177,7 @@ export class PasswordService {
         const result = stmt.run(
           password.id,
           password.title,
-          password.username,
+          this.isEnc(password.username) ? password.username : this.crypto.encrypt(password.username),
           password.password ?? null,
           password.url || null,
           password.notes || null,
@@ -151,7 +193,7 @@ export class PasswordService {
       );
       const result = stmt.run(
         password.title,
-        password.username,
+        this.isEnc(password.username) ? password.username : this.crypto.encrypt(password.username),
         password.password ?? null,
         password.url || null,
         password.notes || null,
@@ -224,10 +266,15 @@ export class PasswordService {
     const d = new Date();
     d.setMonth(d.getMonth() - 6);
     const rows = this.db.prepare('SELECT * FROM passwords WHERE updated_at < ? ORDER BY updated_at ASC').all(d.toISOString()) as PasswordItem[];
-    return rows.map(p => ({
-      ...p,
-      password: p.password ? this.crypto.decrypt(p.password) : ''
-    }));
+    return rows.map(p => {
+      const unameRaw = p.username;
+      const unamePlain = this.isEnc(unameRaw) ? this.crypto.decrypt(unameRaw as any) : (unameRaw || '');
+      return {
+        ...p,
+        username: this.maskUsername(unamePlain),
+        password: p.password ? this.crypto.decrypt(p.password) : ''
+      } as any;
+    });
   }
 
   /** 使用 FTS5 进行全文搜索（按更新时间排序） */
@@ -236,11 +283,27 @@ export class PasswordService {
       `SELECT p.* FROM passwords p JOIN passwords_fts fts ON p.id = fts.rowid WHERE passwords_fts MATCH ? ORDER BY p.updated_at DESC`
     );
     const q = keyword.includes(' ') ? `"${keyword}"` : keyword;
-    const rows = stmt.all(q) as PasswordItem[];
-    return rows.map(p => ({
-      ...p,
-      password: p.password ? this.crypto.decrypt(p.password) : ''
-    }));
+    const ftsRows = stmt.all(q) as PasswordItem[];
+    const allRows = this.db.prepare('SELECT * FROM passwords').all() as PasswordItem[];
+    const unameMatches = allRows.filter(p => {
+      const unameRaw = p.username;
+      const unamePlain = this.isEnc(unameRaw) ? this.crypto.decrypt(unameRaw as any) : (unameRaw || '');
+      return unamePlain && unamePlain.toLowerCase().includes(keyword.toLowerCase());
+    });
+    const mergedMap = new Map<number, PasswordItem>();
+    for (const r of [...ftsRows, ...unameMatches]) {
+      if (r.id != null) mergedMap.set(r.id!, r);
+    }
+    const out = Array.from(mergedMap.values()).sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
+    return out.map(p => {
+      const unameRaw = p.username;
+      const unamePlain = this.isEnc(unameRaw) ? this.crypto.decrypt(unameRaw as any) : (unameRaw || '');
+      return {
+        ...p,
+        username: this.maskUsername(unamePlain),
+        password: p.password ? this.crypto.decrypt(p.password) : ''
+      } as any;
+    });
   }
 
   /** 高级搜索：支持字段过滤、日期范围与关键字（FTS） */
@@ -261,28 +324,44 @@ export class PasswordService {
       params.push(options.keyword.includes(' ') ? `"${options.keyword}"` : options.keyword);
     }
     if (options.title) { query += ' AND title LIKE ?'; params.push(`%${options.title}%`); }
-    if (options.username) { query += ' AND username LIKE ?'; params.push(`%${options.username}%`); }
+    // username 采用应用层匹配，避免明文进入索引
     if (options.url) { query += ' AND url LIKE ?'; params.push(`%${options.url}%`); }
     if (options.notes) { query += ' AND notes LIKE ?'; params.push(`%${options.notes}%`); }
     if (options.groupId) { query += ' AND group_id = ?'; params.push(options.groupId); }
     if (options.dateFrom) { query += ' AND updated_at >= ?'; params.push(options.dateFrom); }
     if (options.dateTo) { query += ' AND updated_at <= ?'; params.push(options.dateTo); }
     query += ' ORDER BY updated_at DESC';
-    const rows = this.db.prepare(query).all(...params) as PasswordItem[];
-    return rows.map(p => ({
-      ...p,
-      password: p.password ? this.crypto.decrypt(p.password) : ''
-    }));
+    let rows = this.db.prepare(query).all(...params) as PasswordItem[];
+    if (options.username && options.username.trim()) {
+      const kw = options.username.trim().toLowerCase();
+      rows = rows.filter(p => {
+        const unameRaw = p.username;
+        const unamePlain = this.isEnc(unameRaw) ? this.crypto.decrypt(unameRaw as any) : (unameRaw || '');
+        return unamePlain && unamePlain.toLowerCase().includes(kw);
+      });
+    }
+    return rows.map(p => {
+      const unameRaw = p.username;
+      const unamePlain = this.isEnc(unameRaw) ? this.crypto.decrypt(unameRaw as any) : (unameRaw || '');
+      return {
+        ...p,
+        username: this.maskUsername(unamePlain),
+        password: p.password ? this.crypto.decrypt(p.password) : ''
+      } as any;
+    });
   }
 
   /** 根据ID获取单个密码（解密） */
   public getPasswordById(id: number): PasswordItem | null {
     const row = this.db.prepare('SELECT * FROM passwords WHERE id = ?').get(id) as PasswordItem | undefined;
     if (!row) return null;
+    const unameRaw = row.username;
+    const unamePlain = this.isEnc(unameRaw) ? this.crypto.decrypt(unameRaw as any) : (unameRaw || '');
     return {
       ...row,
+      username: unamePlain,
       password: row.password ? this.crypto.decrypt(row.password) : ''
-    };
+    } as any;
   }
 
 
