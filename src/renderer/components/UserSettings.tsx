@@ -17,13 +17,14 @@ import {
   Alert,
   Input
 } from 'antd';
-import { SaveOutlined, ReloadOutlined, SafetyCertificateOutlined, ToolOutlined, CloudDownloadOutlined, CloudUploadOutlined, CheckCircleOutlined, ToolTwoTone } from '@ant-design/icons';
+import { SaveOutlined, ReloadOutlined, SafetyCertificateOutlined, ToolOutlined, CloudDownloadOutlined, CloudUploadOutlined, CheckCircleOutlined, ToolTwoTone, FolderOpenOutlined, CloudOutlined } from '@ant-design/icons';
 import type { MasterPasswordState, UserSetting } from '../../shared/types';
 import * as settingsService from '../services/settings';
 import ImportExportModal from './ImportExportModal';
 import { useBackup } from '../hooks/useBackup';
 import { useIntegrity } from '../hooks/useIntegrity';
 import * as securityService from '../services/security';
+import * as backupService from '../services/backup';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -36,13 +37,15 @@ const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [exportModalVisible, setExportModalVisible] = useState(false);
-  const { exporting, exportData } = useBackup();
+  const { exporting, exportData, exportDataToFile } = useBackup();
   const { checking, repairing, report, repairResult, check, repair } = useIntegrity();
   const [securityState, setSecurityState] = useState<MasterPasswordState | null>(null);
   const [masterModalVisible, setMasterModalVisible] = useState(false);
   const [masterMode, setMasterMode] = useState<'set' | 'update' | 'remove'>('set');
   const [masterSaving, setMasterSaving] = useState(false);
   const [masterForm] = Form.useForm();
+  const [selectingExportPath, setSelectingExportPath] = useState(false);
+  const normalizeExportFormat = (fmt?: string) => (fmt === 'encrypted_zip' ? 'encrypted_zip' : 'json');
 
   const loadSecurityState = useCallback(async () => {
     const state = await securityService.getSecurityState();
@@ -81,7 +84,21 @@ useEffect(() => {
           formData[setting.key] = setting.value;
         }
       });
-      form.setFieldsValue(formData);
+      const normalizedExportFormat = normalizeExportFormat(formData.exportFormat);
+      form.setFieldsValue({
+        theme: 'auto',
+        language: 'zh-CN',
+        showPasswordStrength: true,
+        autoSave: false,
+        uiListDensity: 'comfortable',
+        uiFontSize: 'normal',
+        uiCompactSidebar: false,
+        uiShowQuickActions: true,
+        exportDefaultPassword: '',
+        exportDefaultPath: '',
+        ...formData,
+        exportFormat: normalizedExportFormat
+      });
     } catch (error) {
       console.error('加载设置失败:', error);
       message.error('加载设置失败');
@@ -108,6 +125,7 @@ useEffect(() => {
       // 保存其他设置项
       for (const [key, value] of Object.entries(values)) {
         if (key === 'autoLockMinutes' || key === 'requireMasterPassword') continue;
+        if (value === undefined) continue;
         await settingsService.setSetting(key, String(value));
       }
       await loadSecurityState();
@@ -138,10 +156,22 @@ useEffect(() => {
         else if (setting.type === 'number') formData[setting.key] = Number(setting.value);
         else formData[setting.key] = setting.value;
       });
+      const normalizedExportFormat = normalizeExportFormat(formData.exportFormat);
       form.setFieldsValue({
         requireMasterPassword: false,
         autoLockMinutes: formData.autoLockMinutes || 5,
-        ...formData
+        theme: 'auto',
+        language: 'zh-CN',
+        showPasswordStrength: true,
+        autoSave: false,
+        uiListDensity: 'comfortable',
+        uiFontSize: 'normal',
+        uiCompactSidebar: false,
+        uiShowQuickActions: true,
+        exportDefaultPassword: '',
+        exportDefaultPath: '',
+        ...formData,
+        exportFormat: normalizedExportFormat
       });
       await loadSecurityState();
       message.success('已重置为默认设置');
@@ -155,20 +185,58 @@ useEffect(() => {
 
   const handleQuickExport = async () => {
     try {
-      const data = await exportData({ format: 'json' });
-      const blob = new Blob([data as unknown as BlobPart], { type: 'application/json' });
+      const format = normalizeExportFormat(form.getFieldValue('exportFormat'));
+      const archivePassword = form.getFieldValue('exportDefaultPassword');
+      const exportPath = form.getFieldValue('exportDefaultPath');
+      if (format === 'encrypted_zip' && (!archivePassword || String(archivePassword).length < 4)) {
+        message.error('请先设置至少4位的加密ZIP默认密码');
+        return;
+      }
+      const options = {
+        format,
+        includeHistory: true,
+        includeGroups: true,
+        includeSettings: true,
+        archivePassword: format === 'encrypted_zip' ? archivePassword : undefined
+      } as const;
+      if (exportPath) {
+        await exportDataToFile({ ...options, filePath: exportPath });
+        message.success(`已导出到 ${exportPath}`);
+        return;
+      }
+      const data = await exportData(options);
+      const blob = new Blob([data as unknown as BlobPart], { type: format === 'encrypted_zip' ? 'application/zip' : 'application/json' });
+      const ext = format === 'encrypted_zip' ? 'zip' : 'json';
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `passwords_backup_${new Date().toISOString().split('T')[0]}.json`;
+      link.download = `passwords_backup_${new Date().toISOString().split('T')[0]}.${ext}`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      message.success('已导出 JSON 备份');
+      message.success(`已导出 ${ext.toUpperCase()} 备份`);
     } catch (error) {
       console.error('快速导出失败:', error);
-      message.error('快速导出失败');
+      const errMsg = error instanceof Error ? error.message : '快速导出失败';
+      message.error(errMsg);
+    }
+  };
+
+  const handlePickExportPath = async () => {
+    try {
+      setSelectingExportPath(true);
+      const format = normalizeExportFormat(form.getFieldValue('exportFormat'));
+      const currentPath = form.getFieldValue('exportDefaultPath');
+      const picked = await backupService.pickExportPath({ defaultPath: currentPath, format });
+      if (picked !== null) {
+        form.setFieldsValue({ exportDefaultPath: picked });
+      }
+    } catch (error) {
+      console.error('选择导出路径失败:', error);
+      message.error('选择导出路径失败');
+    } finally {
+      setSelectingExportPath(false);
     }
   };
 
@@ -398,6 +466,57 @@ useEffect(() => {
               </Form.Item>
             </Col>
           </Row>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                label="列表密度"
+                name="uiListDensity"
+                tooltip="影响表格、列表等组件的间距"
+              >
+                <Select placeholder="选择列表密度">
+                  <Option value="comfortable">标准</Option>
+                  <Option value="compact">紧凑</Option>
+                  <Option value="spacious">宽松</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label="界面字体大小"
+                name="uiFontSize"
+              >
+                <Select placeholder="选择字体大小">
+                  <Option value="small">小</Option>
+                  <Option value="normal">中</Option>
+                  <Option value="large">大</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                label="侧边栏紧凑模式"
+                name="uiCompactSidebar"
+                valuePropName="checked"
+                tooltip="减少侧边栏宽度，更多空间留给内容区"
+              >
+                <Switch />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label="显示快捷操作按钮"
+                name="uiShowQuickActions"
+                valuePropName="checked"
+                tooltip="在列表行内显示常用操作按钮"
+              >
+                <Switch />
+              </Form.Item>
+            </Col>
+          </Row>
         </Card>
 
         {/* 数据管理设置 */}
@@ -410,8 +529,7 @@ useEffect(() => {
               >
                 <Select placeholder="选择导出格式">
                   <Option value="json">JSON</Option>
-                  <Option value="csv">CSV</Option>
-                  <Option value="txt">TXT</Option>
+                  <Option value="encrypted_zip">加密ZIP</Option>
                 </Select>
               </Form.Item>
             </Col>
@@ -422,6 +540,36 @@ useEffect(() => {
                 valuePropName="checked"
               >
                 <Switch />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                label="加密ZIP默认密码"
+                name="exportDefaultPassword"
+                tooltip="用于加密ZIP导出，至少4位。未设置则无法快速导出加密包。"
+                rules={[{ min: 4, message: '至少4位' }]}
+              >
+                <Input.Password placeholder="可选，至少4位" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label="默认导出路径"
+                name="exportDefaultPath"
+                tooltip="不填写则默认下载到浏览器下载目录"
+              >
+                <Input
+                  placeholder="选择保存路径（可选）"
+                  readOnly
+                  addonAfter={
+                    <Button size="small" icon={<FolderOpenOutlined />} onClick={handlePickExportPath} loading={selectingExportPath}>
+                      选择
+                    </Button>
+                  }
+                />
               </Form.Item>
             </Col>
           </Row>
@@ -440,6 +588,14 @@ useEffect(() => {
                   placeholder="30"
                 />
               </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Space style={{ marginTop: 30 }} size={8}>
+                <Button icon={<CloudOutlined />} disabled>
+                  云盘备份（待开发）
+                </Button>
+                <Tag color="default">即将推出</Tag>
+              </Space>
             </Col>
           </Row>
         </Card>

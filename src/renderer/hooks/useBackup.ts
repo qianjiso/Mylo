@@ -30,5 +30,14 @@ export function useBackup() {
     }
   }, []);
 
-  return { exporting, importing, lastExport, lastImportResult, exportData, importData };
+  const exportDataToFile = useCallback(async (options: ExportOptions & { filePath: string }) => {
+    setExporting(true);
+    try {
+      return await backupService.exportDataToFile(options);
+    } finally {
+      setExporting(false);
+    }
+  }, []);
+
+  return { exporting, importing, lastExport, lastImportResult, exportData, exportDataToFile, importData };
 }

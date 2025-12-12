@@ -90,6 +90,15 @@ export interface ElectronAPI {
     includeSettings?: boolean;
     archivePassword?: string;
   }) => Promise<{ success: boolean; data?: number[]; error?: string }>;
+  exportDataToFile: (options: {
+    format: 'json' | 'encrypted_zip';
+    includeHistory?: boolean;
+    includeGroups?: boolean;
+    includeSettings?: boolean;
+    archivePassword?: string;
+    filePath: string;
+  }) => Promise<{ success: boolean; filePath?: string | null; error?: string }>;
+  pickExportPath: (options: { defaultPath?: string; format: 'json' | 'encrypted_zip' }) => Promise<{ success: boolean; filePath?: string | null; error?: string }>;
   
   importData: (data: number[], options: {
     format: 'json';
@@ -181,8 +190,9 @@ const electronAPI: ElectronAPI = {
   
   // 文件操作
   exportData: (options) => ipcRenderer.invoke('export-data', options),
-  importData: (data, options) => ipcRenderer.invoke('import-data', data, options)
-  ,
+  exportDataToFile: (options) => ipcRenderer.invoke('export-data-to-file', options),
+  pickExportPath: (options) => ipcRenderer.invoke('pick-export-path', options),
+  importData: (data, options) => ipcRenderer.invoke('import-data', data, options),
   getNoteGroups: () => ipcRenderer.invoke('get-note-groups'),
   getNoteGroupTree: (parentId) => ipcRenderer.invoke('get-note-group-tree', parentId),
   addNoteGroup: (group) => ipcRenderer.invoke('add-note-group', group),

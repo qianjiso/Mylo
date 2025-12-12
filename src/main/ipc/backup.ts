@@ -1,4 +1,6 @@
-import { ipcMain, BrowserWindow } from 'electron';
+import { ipcMain, BrowserWindow, dialog, app } from 'electron';
+import * as fs from 'fs';
+import * as path from 'path';
 import DatabaseService from '../database/DatabaseService';
 
 export function registerBackupIpc(db: DatabaseService, win?: BrowserWindow | null) {
@@ -12,6 +14,42 @@ export function registerBackupIpc(db: DatabaseService, win?: BrowserWindow | nul
     try {
       const data = await db.exportData(options);
       return { success: true, data: Array.from(data) };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('export-data-to-file', async (_, options: {
+    format: 'json' | 'encrypted_zip';
+    includeHistory?: boolean;
+    includeGroups?: boolean;
+    includeSettings?: boolean;
+    archivePassword?: string;
+    filePath: string;
+  }) => {
+    try {
+      if (!options.filePath) throw new Error('未选择导出路径');
+      const data = await db.exportData(options);
+      fs.writeFileSync(options.filePath, Buffer.from(data));
+      return { success: true, filePath: options.filePath };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('pick-export-path', async (_, opts: { defaultPath?: string; format: 'json' | 'encrypted_zip' }) => {
+    try {
+      const defaultExt = opts.format === 'encrypted_zip' ? 'zip' : 'json';
+      const defaultFileName = `passwords_backup_${new Date().toISOString().split('T')[0]}.${defaultExt}`;
+      const dialogRes = await dialog.showSaveDialog({
+        defaultPath: opts.defaultPath || path.join(app.getPath('documents'), defaultFileName),
+        filters: [
+          { name: opts.format === 'encrypted_zip' ? 'Encrypted Zip' : 'JSON', extensions: [defaultExt] },
+          { name: 'All Files', extensions: ['*'] }
+        ]
+      });
+      if (dialogRes.canceled) return { success: true, filePath: null };
+      return { success: true, filePath: dialogRes.filePath };
     } catch (error) {
       return { success: false, error: (error as Error).message };
     }
@@ -51,4 +89,3 @@ export function registerBackupIpc(db: DatabaseService, win?: BrowserWindow | nul
     }
   });
 }
-
