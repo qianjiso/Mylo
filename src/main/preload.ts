@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { Group, GroupWithChildren, PasswordHistory, UserSetting, UserSettingsCategory, SecureRecord, SecureRecordGroup } from '../shared/types';
+import type { Group, GroupWithChildren, PasswordHistory, UserSetting, UserSettingsCategory, SecureRecord, SecureRecordGroup, MasterPasswordState } from '../shared/types';
 
 // 定义暴露给渲染进程的API接口
 export interface ElectronAPI {
@@ -111,6 +111,12 @@ export interface ElectronAPI {
   updateNote(id: number, note: SecureRecord): Promise<{ success: boolean; error?: string }>;
   deleteNote(id: number): Promise<{ success: boolean; error?: string }>;
   searchNotesTitle(keyword: string): Promise<any[]>;
+  getSecurityState(): Promise<MasterPasswordState>;
+  setMasterPassword(password: string, hint?: string): Promise<{ success: boolean; state?: MasterPasswordState; error?: string }>;
+  verifyMasterPassword(password: string): Promise<{ success: boolean; state?: MasterPasswordState; error?: string }>;
+  updateMasterPassword(currentPassword: string, newPassword: string, hint?: string): Promise<{ success: boolean; state?: MasterPasswordState; error?: string }>;
+  clearMasterPassword(currentPassword: string): Promise<{ success: boolean; state?: MasterPasswordState; error?: string }>;
+  setRequireMasterPassword(require: boolean): Promise<{ success: boolean; state?: MasterPasswordState; error?: string }>;
 }
 
 // 将API暴露给渲染进程
@@ -188,7 +194,13 @@ const electronAPI: ElectronAPI = {
   updateNote: (id, note) => ipcRenderer.invoke('update-note', id, note),
   deleteNote: (id) => ipcRenderer.invoke('delete-note', id),
   searchNotesTitle: (keyword) => ipcRenderer.invoke('search-notes-title', keyword),
-  onDataImported: (handler) => { ipcRenderer.on('data-imported', (_e, payload) => handler(payload)); }
+  onDataImported: (handler) => { ipcRenderer.on('data-imported', (_e, payload) => handler(payload)); },
+  getSecurityState: () => ipcRenderer.invoke('security-get-state'),
+  setMasterPassword: (password, hint) => ipcRenderer.invoke('security-set-master-password', { password, hint }),
+  verifyMasterPassword: (password) => ipcRenderer.invoke('security-verify-master-password', password),
+  updateMasterPassword: (currentPassword, newPassword, hint) => ipcRenderer.invoke('security-update-master-password', { currentPassword, newPassword, hint }),
+  clearMasterPassword: (currentPassword) => ipcRenderer.invoke('security-clear-master-password', currentPassword),
+  setRequireMasterPassword: (require) => ipcRenderer.invoke('security-set-require-master-password', require)
 };
 
 // 使用 contextBridge 安全地暴露API

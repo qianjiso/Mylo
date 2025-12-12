@@ -15,6 +15,7 @@ class PasswordManagerApp {
 
   constructor() {
     try {
+      // 在主进程启动时，根据 app.isPackaged 为开发模式设置独立的 userData 路径，采用“原目录名 + -dev ”后缀。
       if (!app.isPackaged) {
         const def = app.getPath('userData');
         const devPath = path.join(path.dirname(def), `${path.basename(def)}-dev`);
@@ -49,7 +50,7 @@ class PasswordManagerApp {
         registerNotesIpc(this.databaseService!);
         registerSettingsIpc(this.databaseService!);
         registerBackupIpc(this.databaseService!, this.mainWindow);
-        registerSecurityIpc(this.databaseService!);
+        registerSecurityIpc(this.databaseService!, this.databaseService!.getSecurityService());
         this.registerWindowIpc();
         
         // 移除非 macOS 平台的默认菜单栏

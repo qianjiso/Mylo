@@ -9,6 +9,7 @@ import { Group, GroupWithChildren, PasswordItem, PasswordHistory, UserSetting, U
 import { createCrypto } from '../../shared/security/crypto';
 import BackupService from '../services/BackupService';
 import IntegrityService from '../services/IntegrityService';
+import SecurityService from '../services/SecurityService';
  
 
 export class DatabaseService {
@@ -21,6 +22,7 @@ export class DatabaseService {
   private cryptoAdapter!: { encrypt: (text: string) => string; decrypt: (text: string) => string };
   private backupService!: BackupService;
   private integrityService!: IntegrityService;
+  private securityService!: SecurityService;
 
   constructor() {
     // 从环境变量或默认值获取加密密钥
@@ -49,6 +51,7 @@ export class DatabaseService {
       this.noteService = new NoteService(this.db, this.cryptoAdapter);
       this.backupService = new BackupService(this.db, this.cryptoAdapter, this.groupService, this.passwordService, this.settingsService, this.noteService);
       this.integrityService = new IntegrityService(this.db);
+      this.securityService = new SecurityService(this.db, this.settingsService);
     } catch (error) {
       console.error('Database initialization error:', error);
       throw error;
@@ -208,6 +211,12 @@ export class DatabaseService {
   private decrypt(encryptedText: string): string {
     return this.cryptoAdapter.decrypt(encryptedText);
   }
+  public getSecurityService(): SecurityService {
+    return this.securityService;
+  }
+  public getSettingsService(): SettingsService {
+    return this.settingsService;
+  }
 
   // 初始化默认设置
   private initializeDefaultSettings(): void {
@@ -227,6 +236,13 @@ export class DatabaseService {
         type: 'number',
         category: 'security',
         description: '密码生成器默认长度'
+      },
+      {
+        key: 'security.require_master_password',
+        value: 'false',
+        type: 'boolean',
+        category: 'security',
+        description: '是否开启主密码'
       },
       {
         key: 'security.password_generator_include_symbols',

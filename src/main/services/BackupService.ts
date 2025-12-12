@@ -81,6 +81,11 @@ export default class BackupService {
     if (options.mergeStrategy === 'replace') await this.clearAllData();
 
     const groupIdMap = new Map<number, number>();
+    const normalizeId = (id: any): number | null => {
+      if (id === null || id === undefined) return null;
+      const num = Number(id);
+      return Number.isFinite(num) ? num : null;
+    };
     if (payload.groups && payload.groups.length > 0) {
       const pending = [...payload.groups];
       while (pending.length > 0) {
@@ -89,15 +94,16 @@ export default class BackupService {
           const g = pending[i];
           try {
             this.groups.validateGroup(g as Group);
-            const parentOld = g.parent_id ?? null;
+            const oldId = normalizeId(g.id);
+            const parentOld = normalizeId(g.parent_id);
             const parentNew = parentOld == null ? null : (groupIdMap.get(parentOld) ?? parentOld);
             const parentOk = parentNew == null || !!this.groups.getGroupById(parentNew);
             if (!parentOk) continue;
-            const byId = g.id ? this.groups.getGroupById(g.id) : undefined;
+            const byId = oldId != null ? this.groups.getGroupById(oldId) : undefined;
             const byName = this.groups.getGroupByName(g.name, parentNew ?? undefined);
             if (options.mergeStrategy === 'skip' && (byId || byName)) {
               const mapped = (byId?.id ?? byName?.id);
-              if (typeof g.id === 'number' && mapped) groupIdMap.set(g.id, mapped);
+              if (oldId != null && mapped) groupIdMap.set(oldId, mapped);
               result.skipped++;
               pending.splice(i, 1);
               progressed = true;
@@ -110,9 +116,9 @@ export default class BackupService {
             } else if (byName) {
               savedId = this.groups.saveGroupFromImport({ ...g, id: byName.id, parent_id: parentNew ?? undefined } as Group);
             } else {
-              savedId = this.groups.saveGroupFromImport({ name: g.name, parent_id: parentNew ?? undefined, color: g.color, sort: g.sort } as Group);
+              savedId = this.groups.saveGroupFromImport({ ...g, id: oldId ?? undefined, parent_id: parentNew ?? undefined } as Group);
             }
-            if (typeof g.id === 'number') groupIdMap.set(g.id, savedId);
+            if (oldId != null) groupIdMap.set(oldId, savedId);
             result.imported++;
             pending.splice(i, 1);
             progressed = true;

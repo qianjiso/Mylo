@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { useState } from 'react';
 import { Button, Tag, Tooltip, Space, Popconfirm, message } from 'antd';
 import { FolderOutlined, EditOutlined, DeleteOutlined, HistoryOutlined, EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons';
@@ -72,6 +73,7 @@ const UsernameCell: React.FC<{ text: string; id: number }> = ({ text, id }) => {
  * @param onDelete 删除密码的回调
  * @returns Antd Table 的列配置
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function buildPasswordColumns(
   groups: GroupLite[],
   visiblePasswords: Set<string>,

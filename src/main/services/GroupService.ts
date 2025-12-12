@@ -112,8 +112,8 @@ export class GroupService {
 
   /** 根据名称与父ID查询分组（颜色补全） */
   public getGroupByName(name: string, parentId?: number): Group | undefined {
-    const stmt = this.db.prepare('SELECT * FROM groups WHERE name = ? AND parent_id = ?');
-    const result = stmt.get(name, parentId || null) as Group | undefined;
+    const stmt = this.db.prepare('SELECT * FROM groups WHERE name = ? AND (parent_id IS ? OR parent_id = ?)');
+    const result = stmt.get(name, parentId ?? null, parentId ?? null) as Group | undefined;
     if (result) result.color = result.color || 'blue';
     return result;
   }

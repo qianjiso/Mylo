@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Card, 
   Form, 
@@ -11,14 +11,19 @@ import {
   Typography,
   Row,
   Col,
-  InputNumber
+  InputNumber,
+  Tag,
+  Modal,
+  Alert,
+  Input
 } from 'antd';
 import { SaveOutlined, ReloadOutlined, SafetyCertificateOutlined, ToolOutlined, CloudDownloadOutlined, CloudUploadOutlined, CheckCircleOutlined, ToolTwoTone } from '@ant-design/icons';
-import type { UserSetting } from '../../shared/types';
+import type { MasterPasswordState, UserSetting } from '../../shared/types';
 import * as settingsService from '../services/settings';
 import ImportExportModal from './ImportExportModal';
 import { useBackup } from '../hooks/useBackup';
 import { useIntegrity } from '../hooks/useIntegrity';
+import * as securityService from '../services/security';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -33,7 +38,20 @@ const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
   const [exportModalVisible, setExportModalVisible] = useState(false);
   const { exporting, exportData } = useBackup();
   const { checking, repairing, report, repairResult, check, repair } = useIntegrity();
-  
+  const [securityState, setSecurityState] = useState<MasterPasswordState | null>(null);
+  const [masterModalVisible, setMasterModalVisible] = useState(false);
+  const [masterMode, setMasterMode] = useState<'set' | 'update' | 'remove'>('set');
+  const [masterSaving, setMasterSaving] = useState(false);
+  const [masterForm] = Form.useForm();
+
+  const loadSecurityState = useCallback(async () => {
+    const state = await securityService.getSecurityState();
+    setSecurityState(state);
+    form.setFieldsValue({
+      requireMasterPassword: state.requireMasterPassword,
+      autoLockMinutes: state.autoLockMinutes
+    });
+  }, [form]);
 
 useEffect(() => {
   const load = async () => {
@@ -41,7 +59,20 @@ useEffect(() => {
       setLoading(true);
       const settingsData = await settingsService.listSettings();
       const formData: Record<string, any> = {};
+      const secState = await securityService.getSecurityState();
+      setSecurityState(secState);
+      formData.requireMasterPassword = secState.requireMasterPassword;
+      formData.autoLockMinutes = secState.autoLockMinutes;
       settingsData.forEach((setting: UserSetting) => {
+        if (setting.key === 'security.auto_lock_timeout') {
+          const minutes = Math.max(1, Math.round(Number(setting.value) / 60));
+          formData.autoLockMinutes = minutes;
+          return;
+        }
+        if (setting.key === 'autoLockTime') {
+          formData.autoLockMinutes = Number(setting.value) || formData.autoLockMinutes;
+          return;
+        }
         if (setting.type === 'boolean') {
           formData[setting.key] = setting.value === 'true';
         } else if (setting.type === 'number') {
@@ -66,11 +97,20 @@ useEffect(() => {
       setLoading(true);
       const values = form.getFieldsValue();
       
-      // 保存每个设置项
+      if (values.autoLockMinutes != null) {
+        const seconds = Math.max(1, Number(values.autoLockMinutes)) * 60;
+        await settingsService.setSetting('security.auto_lock_timeout', String(seconds), 'number', 'security', '自动锁定时间（秒）');
+      }
+      if (typeof values.requireMasterPassword === 'boolean') {
+        await securityService.setRequireMasterPassword(values.requireMasterPassword);
+      }
+
+      // 保存其他设置项
       for (const [key, value] of Object.entries(values)) {
+        if (key === 'autoLockMinutes' || key === 'requireMasterPassword') continue;
         await settingsService.setSetting(key, String(value));
       }
-      
+      await loadSecurityState();
       message.success('设置保存成功');
       if (onClose) onClose();
     } catch (error) {
@@ -86,14 +126,24 @@ useEffect(() => {
       setLoading(true);
       const res = await settingsService.resetAllSettingsToDefault();
       if (!res.success) throw new Error(res.error || '重置失败');
+      await securityService.setRequireMasterPassword(false);
       const settingsData = await settingsService.listSettings();
       const formData: Record<string, any> = {};
       settingsData.forEach((setting: UserSetting) => {
+        if (setting.key === 'security.auto_lock_timeout') {
+          formData.autoLockMinutes = Math.max(1, Math.round(Number(setting.value) / 60));
+          return;
+        }
         if (setting.type === 'boolean') formData[setting.key] = setting.value === 'true';
         else if (setting.type === 'number') formData[setting.key] = Number(setting.value);
         else formData[setting.key] = setting.value;
       });
-      form.setFieldsValue(formData);
+      form.setFieldsValue({
+        requireMasterPassword: false,
+        autoLockMinutes: formData.autoLockMinutes || 5,
+        ...formData
+      });
+      await loadSecurityState();
       message.success('已重置为默认设置');
     } catch (error) {
       console.error('重置设置失败:', error);
@@ -144,6 +194,37 @@ useEffect(() => {
     }
   };
 
+  const handleMasterSubmit = async () => {
+    const values = await masterForm.validateFields();
+    try {
+      setMasterSaving(true);
+      let res: { success: boolean; error?: string; state?: MasterPasswordState } = { success: false };
+      if (masterMode === 'remove') {
+        res = await securityService.clearMasterPassword(values.currentPassword);
+      } else if (masterMode === 'update') {
+        res = await securityService.updateMasterPassword(values.currentPassword, values.newPassword, values.hint);
+      } else {
+        res = await securityService.setMasterPassword(values.newPassword, values.hint);
+      }
+      if (!res.success) throw new Error(res.error || '操作失败');
+      setSecurityState(res.state || null);
+      form.setFieldsValue({
+        requireMasterPassword: res.state?.requireMasterPassword ?? form.getFieldValue('requireMasterPassword'),
+        autoLockMinutes: res.state?.autoLockMinutes ?? form.getFieldValue('autoLockMinutes')
+      });
+      setMasterModalVisible(false);
+      masterForm.resetFields();
+      message.success(masterMode === 'remove' ? '已关闭主密码' : '主密码已更新');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : '操作失败';
+      console.error('主密码操作失败:', error);
+      message.error(msg);
+      throw error;
+    } finally {
+      setMasterSaving(false);
+    }
+  };
+
   return (
     <div style={{ padding: '24px' }}>
       <Title level={3}>用户设置</Title>
@@ -159,7 +240,7 @@ useEffect(() => {
             <Col span={12}>
               <Form.Item
                 label="自动锁定时间（分钟）"
-                name="autoLockTime"
+                name="autoLockMinutes"
                 tooltip="应用闲置多长时间后自动锁定"
               >
                 <InputNumber
@@ -181,6 +262,30 @@ useEffect(() => {
               </Form.Item>
             </Col>
           </Row>
+          <Divider>主密码</Divider>
+          <Space direction="vertical" style={{ width: '100%' }} size="middle">
+            <Space size="small">
+              <Tag color={securityState?.hasMasterPassword ? 'green' : 'red'}>
+                {securityState?.hasMasterPassword ? '已设置' : '未设置'}
+              </Tag>
+              <Typography.Text type="secondary">
+                {securityState?.hasMasterPassword ? '已启用主密码访问控制' : '建议设置主密码以保护数据'}
+              </Typography.Text>
+            </Space>
+            <Space wrap>
+              <Button
+                type="primary"
+                onClick={() => { setMasterMode(securityState?.hasMasterPassword ? 'update' : 'set'); masterForm.resetFields(); setMasterModalVisible(true); }}
+              >
+                {securityState?.hasMasterPassword ? '修改主密码' : '设置主密码'}
+              </Button>
+              {securityState?.hasMasterPassword && (
+                <Button danger onClick={() => { setMasterMode('remove'); masterForm.resetFields(); setMasterModalVisible(true); }}>
+                  关闭主密码
+                </Button>
+              )}
+            </Space>
+          </Space>
 
           <Divider>密码生成器设置</Divider>
           
@@ -423,6 +528,68 @@ useEffect(() => {
           </Space>
         </div>
       </Form>
+      <Modal
+        title={masterMode === 'remove' ? '关闭主密码' : securityState?.hasMasterPassword ? '修改主密码' : '设置主密码'}
+        open={masterModalVisible}
+        onCancel={() => setMasterModalVisible(false)}
+        onOk={async () => {
+          try {
+            await masterForm.validateFields();
+            await handleMasterSubmit();
+          } catch {
+            /* no-op */
+          }
+        }}
+        okButtonProps={{ loading: masterSaving }}
+        destroyOnClose
+      >
+        <Form layout="vertical" form={masterForm}>
+          {masterMode !== 'set' && (
+            <Form.Item
+              label="当前主密码"
+              name="currentPassword"
+              rules={[{ required: true, message: '请输入当前主密码' }]}
+            >
+              <Input.Password />
+            </Form.Item>
+          )}
+          {masterMode !== 'remove' && (
+            <>
+              <Form.Item
+                label="新主密码"
+                name="newPassword"
+                rules={[{ required: true, message: '请输入新主密码' }, { min: 6, message: '至少6位字符' }]}
+              >
+                <Input.Password placeholder="至少6位，建议包含字母和数字" />
+              </Form.Item>
+              <Form.Item
+                label="确认新主密码"
+                name="confirmPassword"
+                dependencies={['newPassword']}
+                rules={[
+                  { required: true, message: '请再次输入新主密码' },
+                  ({ getFieldValue }) => ({
+                    validator(_, value) {
+                      if (!value || getFieldValue('newPassword') === value) {
+                        return Promise.resolve();
+                      }
+                      return Promise.reject(new Error('两次输入的主密码不一致'));
+                    }
+                  })
+                ]}
+              >
+                <Input.Password />
+              </Form.Item>
+              <Form.Item label="主密码提示（可选）" name="hint">
+                <Input placeholder="仅自己能懂的提示" maxLength={100} />
+              </Form.Item>
+            </>
+          )}
+          {masterMode === 'remove' && (
+            <Alert type="warning" message="关闭主密码后，应用启动将不再需要解锁，请确认已备份数据。" />
+          )}
+        </Form>
+      </Modal>
       <ImportExportModal visible={exportModalVisible} onClose={() => setExportModalVisible(false)} />
     </div>
   );

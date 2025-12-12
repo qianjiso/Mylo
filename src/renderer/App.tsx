@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Layout, Button, Table, Modal, Form, Input, message, Space, Select, Tabs, Segmented } from 'antd';
 import { PlusOutlined, SettingOutlined, FolderOutlined, FolderAddOutlined, DownloadOutlined, KeyOutlined } from '@ant-design/icons';
 import PasswordGenerator from './components/PasswordGenerator';
@@ -11,12 +11,14 @@ import NoteGroupTree from './components/NoteGroupTree';
 import './styles/global.css';
 import { buildPasswordColumns } from './columns/passwordColumns';
 import { buildHistoryColumns } from './columns/historyColumns';
+import MasterPasswordGate from './components/MasterPasswordGate';
 
 // 从preload导入类型
-import type { Group } from '../shared/types';
+import type { Group, MasterPasswordState } from '../shared/types';
 import { usePasswords } from './hooks/usePasswords';
 import { useGroups } from './hooks/useGroups';
 import { useNotes } from './hooks/useNotes';
+import * as securityService from './services/security';
 
 // 在浏览器环境中导入mock
 if (typeof window !== 'undefined' && !window.electronAPI) {
@@ -105,15 +107,41 @@ const App: React.FC = () => {
   const [groupForm] = Form.useForm();
   const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [securityState, setSecurityState] = useState<MasterPasswordState | null>(null);
+  const [locked, setLocked] = useState(true);
+  const [checkingSecurity, setCheckingSecurity] = useState(true);
+  const [securityLoading, setSecurityLoading] = useState(false);
+  const lockTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const settingsVisibleRef = useRef(settingsVisible);
 
   useEffect(() => {
-    loadGroups();
-    loadRecentPasswords();
+    const initSecurity = async () => {
+      try {
+        setCheckingSecurity(true);
+        const state = await securityService.getSecurityState();
+        setSecurityState(state);
+        const shouldLock = state.requireMasterPassword;
+        setLocked(shouldLock);
+        if (!shouldLock) {
+          await loadGroups();
+          await loadRecentPasswords();
+        }
+      } catch (err) {
+        console.error('加载安全状态失败', err);
+        setLocked(false);
+        await loadGroups();
+        await loadRecentPasswords();
+      } finally {
+        setCheckingSecurity(false);
+      }
+    };
+    initSecurity();
   }, [loadGroups, loadRecentPasswords]);
 
   useEffect(() => {
     if (window.electronAPI?.onDataImported) {
       window.electronAPI.onDataImported(async () => {
+        if (locked) return;
         await loadGroups();
         if (selectedGroupId) {
           await loadPasswords(selectedGroupId);
@@ -122,22 +150,94 @@ const App: React.FC = () => {
         }
       });
     }
-  }, [selectedGroupId, loadGroups, loadPasswords, loadRecentPasswords]);
+  }, [locked, selectedGroupId, loadGroups, loadPasswords, loadRecentPasswords]);
 
   useEffect(() => {
+    if (locked || checkingSecurity) return;
     if (selectedGroupId) {
       loadPasswords(selectedGroupId);
       setSearchQuery('');
     } else if (!searchQuery) {
       loadRecentPasswords();
     }
-  }, [selectedGroupId, searchQuery, loadPasswords, loadRecentPasswords]);
+  }, [selectedGroupId, searchQuery, loadPasswords, loadRecentPasswords, locked, checkingSecurity]);
 
-  
+  const resetAutoLockTimer = useCallback(() => {
+    if (lockTimerRef.current) {
+      clearTimeout(lockTimerRef.current);
+    }
+    if (!securityState?.requireMasterPassword || !securityState.hasMasterPassword) return;
+    const minutes = Math.max(1, securityState.autoLockMinutes || 5);
+    lockTimerRef.current = setTimeout(() => {
+      setLocked(true);
+    }, minutes * 60 * 1000);
+  }, [securityState]);
 
-  
+  useEffect(() => {
+    if (locked || !securityState?.requireMasterPassword || !securityState.hasMasterPassword) return;
+    const reset = () => resetAutoLockTimer();
+    window.addEventListener('mousemove', reset);
+    window.addEventListener('keydown', reset);
+    window.addEventListener('click', reset);
+    reset();
+    return () => {
+      window.removeEventListener('mousemove', reset);
+      window.removeEventListener('keydown', reset);
+      window.removeEventListener('click', reset);
+      if (lockTimerRef.current) {
+        clearTimeout(lockTimerRef.current);
+      }
+    };
+  }, [locked, securityState, resetAutoLockTimer]);
 
-  
+  const handleUnlock = useCallback(async (password: string) => {
+    setSecurityLoading(true);
+    const res = await securityService.verifyMasterPassword(password);
+    setSecurityLoading(false);
+    if (!res.success) {
+      const msg = res.error || '主密码不正确';
+      message.error(msg);
+      throw new Error(msg);
+    }
+    setSecurityState(res.state || securityState);
+    setLocked(false);
+    resetAutoLockTimer();
+    await loadGroups();
+    await loadRecentPasswords();
+  }, [loadGroups, loadRecentPasswords, resetAutoLockTimer, securityState]);
+
+  const handleSetupMaster = useCallback(async (password: string, hint?: string) => {
+    setSecurityLoading(true);
+    const res = await securityService.setMasterPassword(password, hint);
+    setSecurityLoading(false);
+    if (!res.success) {
+      const msg = res.error || '设置主密码失败';
+      message.error(msg);
+      throw new Error(msg);
+    }
+    setSecurityState(res.state || securityState);
+    message.success('主密码已设置并启用');
+    setLocked(false);
+    resetAutoLockTimer();
+    await loadGroups();
+    await loadRecentPasswords();
+  }, [loadGroups, loadRecentPasswords, resetAutoLockTimer, securityState]);
+
+  useEffect(() => {
+    const refreshState = async () => {
+      try {
+        const state = await securityService.getSecurityState();
+        setSecurityState(state);
+        setLocked(state.requireMasterPassword ? true : false);
+      } catch (err) {
+        console.error('刷新安全状态失败', err);
+      }
+    };
+    if (settingsVisibleRef.current && !settingsVisible) {
+      refreshState();
+    }
+    settingsVisibleRef.current = settingsVisible;
+  }, [settingsVisible]);
 
   
 
@@ -449,6 +549,7 @@ const App: React.FC = () => {
   ) as any;
 
   return (
+    <>
     <Layout style={{ minHeight: '100vh' }}>
       <Header className="header">
         <div className="app-toolbar">
@@ -752,6 +853,14 @@ const App: React.FC = () => {
         <div style={{ marginTop: 8, color: '#999' }}>快捷键：⌘1/⌘2 切模块 · ⌘F 搜索 · ⌘N 新建 · ⌘K 打开此面板</div>
       </Modal>
     </Layout>
+    <MasterPasswordGate
+      visible={!checkingSecurity && locked}
+      state={securityState}
+      loading={securityLoading}
+      onUnlock={handleUnlock}
+      onSetup={handleSetupMaster}
+    />
+    </>
   );
 };
 

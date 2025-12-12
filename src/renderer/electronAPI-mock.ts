@@ -58,7 +58,19 @@ const electronAPI = {
   
   // 文件操作
   exportData: () => Promise.resolve({ success: true, data: '{}' }),
-  importData: (_data: number[], _options?: any) => Promise.resolve({ success: true })
+  importData: (_data: number[], _options?: any) => Promise.resolve({ success: true }),
+  getSecurityState: () => Promise.resolve({
+    hasMasterPassword: false,
+    requireMasterPassword: false,
+    hint: '',
+    autoLockMinutes: 5,
+    lastUnlockAt: ''
+  }),
+  setMasterPassword: (_password: string, _hint?: string) => Promise.resolve({ success: true }),
+  verifyMasterPassword: (_password: string) => Promise.resolve({ success: true }),
+  updateMasterPassword: (_currentPassword: string, _newPassword: string, _hint?: string) => Promise.resolve({ success: true }),
+  clearMasterPassword: (_currentPassword: string) => Promise.resolve({ success: true }),
+  setRequireMasterPassword: (_require: boolean) => Promise.resolve({ success: true })
 };
 
 // 在浏览器环境中，将electronAPI挂载到window对象上

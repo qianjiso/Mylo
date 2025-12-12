@@ -106,3 +106,11 @@ export type RepairResult = {
   repaired: string[];
   failed: string[];
 };
+
+export interface MasterPasswordState {
+  hasMasterPassword: boolean;
+  requireMasterPassword: boolean;
+  hint?: string;
+  autoLockMinutes: number;
+  lastUnlockAt?: string;
+}
