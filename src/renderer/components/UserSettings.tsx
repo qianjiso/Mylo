@@ -35,17 +35,65 @@ interface UserSettingsProps {
 
 const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
   const [form] = Form.useForm();
+  const autoExportEnabled = Form.useWatch('autoExportEnabled', form);
   const [loading, setLoading] = useState(false);
   const [exportModalVisible, setExportModalVisible] = useState(false);
-  const { exporting, exportData, exportDataToFile } = useBackup();
+  const { exporting, exportDataToFile } = useBackup();
   const { checking, repairing, report, repairResult, check, repair } = useIntegrity();
   const [securityState, setSecurityState] = useState<MasterPasswordState | null>(null);
   const [masterModalVisible, setMasterModalVisible] = useState(false);
   const [masterMode, setMasterMode] = useState<'set' | 'update' | 'remove'>('set');
   const [masterSaving, setMasterSaving] = useState(false);
   const [masterForm] = Form.useForm();
-  const [selectingExportPath, setSelectingExportPath] = useState(false);
-  const normalizeExportFormat = (fmt?: string) => (fmt === 'encrypted_zip' ? 'encrypted_zip' : 'json');
+  const [selectingExportDirectory, setSelectingExportDirectory] = useState(false);
+  const normalizeExportFormat = useCallback((fmt?: string) => (fmt === 'encrypted_zip' ? 'encrypted_zip' : 'json'), []);
+
+  const mapSettingsToForm = useCallback((settingsData: UserSetting[], secState: MasterPasswordState | null) => {
+    const formData: Record<string, any> = {};
+    settingsData.forEach((setting: UserSetting) => {
+      let key = setting.key;
+      if (key === 'security.auto_lock_timeout') {
+        formData.autoLockMinutes = Math.max(1, Math.round(Number(setting.value) / 60));
+        return;
+      }
+      if (key === 'autoLockTime') {
+        formData.autoLockMinutes = Number(setting.value) || formData.autoLockMinutes;
+        return;
+      }
+      if (key === 'backup.auto_export_enabled' || key === 'backupEnabled') key = 'autoExportEnabled';
+      if (key === 'backup.auto_export_frequency') key = 'autoExportFrequency';
+      if (key === 'backup.auto_export_directory') key = 'autoExportDirectory';
+      if (key === 'backup.auto_export_format') key = 'exportFormat';
+      if (key === 'backup.auto_export_password') key = 'exportDefaultPassword';
+      if (key === 'security.clipboard_clear_timeout') key = 'clipboardClearTime';
+      if (setting.type === 'boolean') {
+        formData[key] = setting.value === 'true';
+      } else if (setting.type === 'number') {
+        formData[key] = Number(setting.value);
+      } else {
+        formData[key] = setting.value;
+      }
+    });
+    const normalizedExportFormat = normalizeExportFormat(formData.exportFormat);
+    return {
+      theme: 'auto',
+      language: 'zh-CN',
+      showPasswordStrength: true,
+      autoSave: false,
+      uiListDensity: 'comfortable',
+      uiFontSize: 'normal',
+      uiCompactSidebar: false,
+      uiShowQuickActions: true,
+      exportDefaultPassword: formData.exportDefaultPassword || '',
+      exportFormat: normalizedExportFormat,
+      autoExportEnabled: formData.autoExportEnabled ?? false,
+      autoExportFrequency: formData.autoExportFrequency || 'daily',
+      autoExportDirectory: formData.autoExportDirectory || '',
+      requireMasterPassword: secState?.requireMasterPassword ?? formData.requireMasterPassword ?? false,
+      autoLockMinutes: secState?.autoLockMinutes ?? formData.autoLockMinutes ?? 5,
+      clipboardClearTime: formData.clipboardClearTime ?? 30
+    };
+  }, [normalizeExportFormat]);
 
   const loadSecurityState = useCallback(async () => {
     const state = await securityService.getSecurityState();
@@ -61,44 +109,10 @@ useEffect(() => {
     try {
       setLoading(true);
       const settingsData = await settingsService.listSettings();
-      const formData: Record<string, any> = {};
       const secState = await securityService.getSecurityState();
       setSecurityState(secState);
-      formData.requireMasterPassword = secState.requireMasterPassword;
-      formData.autoLockMinutes = secState.autoLockMinutes;
-      settingsData.forEach((setting: UserSetting) => {
-        if (setting.key === 'security.auto_lock_timeout') {
-          const minutes = Math.max(1, Math.round(Number(setting.value) / 60));
-          formData.autoLockMinutes = minutes;
-          return;
-        }
-        if (setting.key === 'autoLockTime') {
-          formData.autoLockMinutes = Number(setting.value) || formData.autoLockMinutes;
-          return;
-        }
-        if (setting.type === 'boolean') {
-          formData[setting.key] = setting.value === 'true';
-        } else if (setting.type === 'number') {
-          formData[setting.key] = Number(setting.value);
-        } else {
-          formData[setting.key] = setting.value;
-        }
-      });
-      const normalizedExportFormat = normalizeExportFormat(formData.exportFormat);
-      form.setFieldsValue({
-        theme: 'auto',
-        language: 'zh-CN',
-        showPasswordStrength: true,
-        autoSave: false,
-        uiListDensity: 'comfortable',
-        uiFontSize: 'normal',
-        uiCompactSidebar: false,
-        uiShowQuickActions: true,
-        exportDefaultPassword: '',
-        exportDefaultPath: '',
-        ...formData,
-        exportFormat: normalizedExportFormat
-      });
+      const mapped = mapSettingsToForm(settingsData, secState);
+      form.setFieldsValue(mapped);
     } catch (error) {
       console.error('加载设置失败:', error);
       message.error('加载设置失败');
@@ -107,16 +121,31 @@ useEffect(() => {
     }
   };
   load();
-}, [form]);
+}, [form, mapSettingsToForm]);
 
   const handleSave = async () => {
     try {
       setLoading(true);
       const values = form.getFieldsValue();
+      const exportFormat = normalizeExportFormat(values.exportFormat);
+      const autoExportEnabled = !!values.autoExportEnabled;
+      if (autoExportEnabled && exportFormat === 'encrypted_zip' && (!values.exportDefaultPassword || String(values.exportDefaultPassword).length < 4)) {
+        message.error('开启自动导出并选择加密ZIP时，请先设置至少4位的密码');
+        setLoading(false);
+        return;
+      }
+      if (autoExportEnabled && (!values.autoExportDirectory || !String(values.autoExportDirectory).trim())) {
+        message.error('开启自动导出时，请先选择导出目录');
+        setLoading(false);
+        return;
+      }
       
       if (values.autoLockMinutes != null) {
         const seconds = Math.max(1, Number(values.autoLockMinutes)) * 60;
         await settingsService.setSetting('security.auto_lock_timeout', String(seconds), 'number', 'security', '自动锁定时间（秒）');
+      }
+      if (values.clipboardClearTime != null) {
+        await settingsService.setSetting('security.clipboard_clear_timeout', String(values.clipboardClearTime), 'number', 'security', '剪贴板自动清除时间（秒）');
       }
       if (typeof values.requireMasterPassword === 'boolean') {
         await securityService.setRequireMasterPassword(values.requireMasterPassword);
@@ -124,10 +153,18 @@ useEffect(() => {
 
       // 保存其他设置项
       for (const [key, value] of Object.entries(values)) {
-        if (key === 'autoLockMinutes' || key === 'requireMasterPassword') continue;
+        if (['autoLockMinutes', 'requireMasterPassword', 'autoExportEnabled', 'autoExportFrequency', 'autoExportDirectory', 'exportFormat', 'exportDefaultPassword', 'backupEnabled', 'clipboardClearTime'].includes(key)) continue;
         if (value === undefined) continue;
         await settingsService.setSetting(key, String(value));
       }
+      await settingsService.setSetting('exportFormat', exportFormat, 'string', 'backup', '默认导出格式');
+      await settingsService.setSetting('backup.auto_export_format', exportFormat, 'string', 'backup', '自动导出格式');
+      await settingsService.setSetting('exportDefaultPassword', values.exportDefaultPassword || '', 'string', 'backup', '加密ZIP默认密码');
+      await settingsService.setSetting('backup.auto_export_password', values.exportDefaultPassword || '', 'string', 'backup', '自动导出压缩包密码');
+      await settingsService.setSetting('backup.auto_export_directory', values.autoExportDirectory || '', 'string', 'backup', '自动导出目录');
+      await settingsService.setSetting('backup.auto_export_enabled', String(autoExportEnabled), 'boolean', 'backup', '是否开启自动导出');
+      await settingsService.setSetting('backup.auto_export_frequency', values.autoExportFrequency || 'daily', 'string', 'backup', '自动导出频率');
+      await settingsService.setSetting('backupEnabled', String(autoExportEnabled), 'boolean', 'backup', '自动导出开关（兼容）');
       await loadSecurityState();
       message.success('设置保存成功');
       if (onClose) onClose();
@@ -146,33 +183,10 @@ useEffect(() => {
       if (!res.success) throw new Error(res.error || '重置失败');
       await securityService.setRequireMasterPassword(false);
       const settingsData = await settingsService.listSettings();
-      const formData: Record<string, any> = {};
-      settingsData.forEach((setting: UserSetting) => {
-        if (setting.key === 'security.auto_lock_timeout') {
-          formData.autoLockMinutes = Math.max(1, Math.round(Number(setting.value) / 60));
-          return;
-        }
-        if (setting.type === 'boolean') formData[setting.key] = setting.value === 'true';
-        else if (setting.type === 'number') formData[setting.key] = Number(setting.value);
-        else formData[setting.key] = setting.value;
-      });
-      const normalizedExportFormat = normalizeExportFormat(formData.exportFormat);
-      form.setFieldsValue({
-        requireMasterPassword: false,
-        autoLockMinutes: formData.autoLockMinutes || 5,
-        theme: 'auto',
-        language: 'zh-CN',
-        showPasswordStrength: true,
-        autoSave: false,
-        uiListDensity: 'comfortable',
-        uiFontSize: 'normal',
-        uiCompactSidebar: false,
-        uiShowQuickActions: true,
-        exportDefaultPassword: '',
-        exportDefaultPath: '',
-        ...formData,
-        exportFormat: normalizedExportFormat
-      });
+      const secState = await securityService.getSecurityState();
+      setSecurityState(secState);
+      const mapped = mapSettingsToForm(settingsData, secState);
+      form.setFieldsValue(mapped);
       await loadSecurityState();
       message.success('已重置为默认设置');
     } catch (error) {
@@ -187,7 +201,6 @@ useEffect(() => {
     try {
       const format = normalizeExportFormat(form.getFieldValue('exportFormat'));
       const archivePassword = form.getFieldValue('exportDefaultPassword');
-      const exportPath = form.getFieldValue('exportDefaultPath');
       if (format === 'encrypted_zip' && (!archivePassword || String(archivePassword).length < 4)) {
         message.error('请先设置至少4位的加密ZIP默认密码');
         return;
@@ -199,23 +212,13 @@ useEffect(() => {
         includeSettings: true,
         archivePassword: format === 'encrypted_zip' ? archivePassword : undefined
       } as const;
-      if (exportPath) {
-        await exportDataToFile({ ...options, filePath: exportPath });
-        message.success(`已导出到 ${exportPath}`);
+      const picked = await backupService.pickExportPath({ format });
+      if (!picked) {
+        message.info('已取消导出');
         return;
       }
-      const data = await exportData(options);
-      const blob = new Blob([data as unknown as BlobPart], { type: format === 'encrypted_zip' ? 'application/zip' : 'application/json' });
-      const ext = format === 'encrypted_zip' ? 'zip' : 'json';
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `passwords_backup_${new Date().toISOString().split('T')[0]}.${ext}`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      message.success(`已导出 ${ext.toUpperCase()} 备份`);
+      await exportDataToFile({ ...options, filePath: picked });
+      message.success(`已导出到 ${picked}`);
     } catch (error) {
       console.error('快速导出失败:', error);
       const errMsg = error instanceof Error ? error.message : '快速导出失败';
@@ -223,20 +226,19 @@ useEffect(() => {
     }
   };
 
-  const handlePickExportPath = async () => {
+  const handlePickExportDirectory = async () => {
     try {
-      setSelectingExportPath(true);
-      const format = normalizeExportFormat(form.getFieldValue('exportFormat'));
-      const currentPath = form.getFieldValue('exportDefaultPath');
-      const picked = await backupService.pickExportPath({ defaultPath: currentPath, format });
+      setSelectingExportDirectory(true);
+      const currentPath = form.getFieldValue('autoExportDirectory');
+      const picked = await backupService.pickExportDirectory({ defaultPath: currentPath });
       if (picked !== null) {
-        form.setFieldsValue({ exportDefaultPath: picked });
+        form.setFieldsValue({ autoExportDirectory: picked });
       }
     } catch (error) {
-      console.error('选择导出路径失败:', error);
-      message.error('选择导出路径失败');
+      console.error('选择自动导出目录失败:', error);
+      message.error('选择自动导出目录失败');
     } finally {
-      setSelectingExportPath(false);
+      setSelectingExportDirectory(false);
     }
   };
 
@@ -417,7 +419,7 @@ useEffect(() => {
         </Card>
 
         {/* UI设置 */}
-        <Card title="界面设置" style={{ marginBottom: '16px' }}>
+        <Card title={<Space size={8}><span>界面设置</span><Tag color="orange">待开发</Tag></Space>} style={{ marginBottom: '16px' }}>
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item
@@ -535,11 +537,46 @@ useEffect(() => {
             </Col>
             <Col span={12}>
               <Form.Item
-                label="启用自动备份"
-                name="backupEnabled"
+                label="启用自动导出"
+                name="autoExportEnabled"
                 valuePropName="checked"
               >
                 <Switch />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                label="自动导出频率"
+                name="autoExportFrequency"
+                tooltip="每分钟/每日/每周/每月定期导出到指定目录"
+              >
+                <Select placeholder="选择自动导出频率" disabled={!autoExportEnabled}>
+                  <Option value="every_minute">每分钟</Option>
+                  <Option value="daily">每日</Option>
+                  <Option value="weekly">每周</Option>
+                  <Option value="monthly">每月</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label="自动导出目录"
+                name="autoExportDirectory"
+                tooltip="必须选择导出目录，未选择时自动导出不会运行"
+              >
+                <Input
+                  placeholder="选择自动导出保存目录"
+                  readOnly
+                  disabled={!autoExportEnabled}
+                  addonAfter={
+                    <Button size="small" icon={<FolderOpenOutlined />} onClick={handlePickExportDirectory} loading={selectingExportDirectory} disabled={!autoExportEnabled}>
+                      选择
+                    </Button>
+                  }
+                />
               </Form.Item>
             </Col>
           </Row>
@@ -553,23 +590,6 @@ useEffect(() => {
                 rules={[{ min: 4, message: '至少4位' }]}
               >
                 <Input.Password placeholder="可选，至少4位" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                label="默认导出路径"
-                name="exportDefaultPath"
-                tooltip="不填写则默认下载到浏览器下载目录"
-              >
-                <Input
-                  placeholder="选择保存路径（可选）"
-                  readOnly
-                  addonAfter={
-                    <Button size="small" icon={<FolderOpenOutlined />} onClick={handlePickExportPath} loading={selectingExportPath}>
-                      选择
-                    </Button>
-                  }
-                />
               </Form.Item>
             </Col>
           </Row>

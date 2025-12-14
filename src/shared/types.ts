@@ -114,3 +114,13 @@ export interface MasterPasswordState {
   autoLockMinutes: number;
   lastUnlockAt?: string;
 }
+
+export type AutoExportFrequency = 'every_minute' | 'daily' | 'weekly' | 'monthly';
+
+export interface AutoExportConfig {
+  enabled: boolean;
+  frequency: AutoExportFrequency;
+  directory: string;
+  format: ExportOptions['format'];
+  archivePassword?: string;
+}

@@ -1,7 +1,14 @@
 import { ipcMain } from 'electron';
 import DatabaseService from '../database/DatabaseService';
 
-export function registerSettingsIpc(db: DatabaseService) {
+export function registerSettingsIpc(db: DatabaseService, options?: { onChanged?: () => void }) {
+  const notifyChange = () => {
+    try {
+      options?.onChanged?.();
+    } catch (error) {
+      console.warn('设置变更回调失败', error);
+    }
+  };
   ipcMain.handle('get-user-settings', async (_, category?: string) => {
     return db.getUserSettings(category);
   });
@@ -20,6 +27,7 @@ export function registerSettingsIpc(db: DatabaseService) {
         description: description || ''
       };
       const success = db.saveUserSetting(setting);
+      if (success) notifyChange();
       return { success };
     } catch (error) {
       return { success: false, error: (error as Error).message };
@@ -29,6 +37,7 @@ export function registerSettingsIpc(db: DatabaseService) {
   ipcMain.handle('update-user-setting', async (_, key: string, value: string) => {
     try {
       const success = db.updateUserSetting(key, value);
+      if (success) notifyChange();
       return { success };
     } catch (error) {
       return { success: false, error: (error as Error).message };
@@ -38,6 +47,7 @@ export function registerSettingsIpc(db: DatabaseService) {
   ipcMain.handle('delete-user-setting', async (_, key: string) => {
     try {
       const success = db.deleteUserSetting(key);
+      if (success) notifyChange();
       return { success };
     } catch (error) {
       return { success: false, error: (error as Error).message };
@@ -51,6 +61,7 @@ export function registerSettingsIpc(db: DatabaseService) {
   ipcMain.handle('reset-setting-to-default', async (_, key: string) => {
     try {
       const success = db.resetSettingToDefault(key);
+      if (success) notifyChange();
       return { success };
     } catch (error) {
       return { success: false, error: (error as Error).message };
@@ -60,6 +71,7 @@ export function registerSettingsIpc(db: DatabaseService) {
   ipcMain.handle('reset-all-settings-to-default', async () => {
     try {
       const count = db.resetAllSettingsToDefault();
+      if (count > 0) notifyChange();
       return { success: true, count };
     } catch (error) {
       return { success: false, error: (error as Error).message };
@@ -69,6 +81,7 @@ export function registerSettingsIpc(db: DatabaseService) {
   ipcMain.handle('import-settings', async (_, settings: any[]) => {
     try {
       const count = db.importSettings(settings);
+      if (count > 0) notifyChange();
       return { success: true, count };
     } catch (error) {
       return { success: false, error: (error as Error).message };
@@ -84,4 +97,3 @@ export function registerSettingsIpc(db: DatabaseService) {
     }
   });
 }
-

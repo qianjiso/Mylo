@@ -8,10 +8,12 @@ import { registerNotesIpc } from './ipc/notes';
 import { registerSettingsIpc } from './ipc/settings';
 import { registerBackupIpc } from './ipc/backup';
 import { registerSecurityIpc } from './ipc/security';
+import AutoExportService from './services/AutoExportService';
 
 class PasswordManagerApp {
   private mainWindow: BrowserWindow | null = null;
   private databaseService: DatabaseService | null = null;
+  private autoExportService: AutoExportService | null = null;
 
   constructor() {
     try {
@@ -43,15 +45,17 @@ class PasswordManagerApp {
         // 初始化数据库服务
         this.databaseService = new DatabaseService();
         console.info('database initialized at', getLogFilePath());
+        this.autoExportService = new AutoExportService(this.databaseService);
         
         // 设置IPC处理器（分域注册）
         registerPasswordIpc(this.databaseService!);
         registerGroupIpc(this.databaseService!);
         registerNotesIpc(this.databaseService!);
-        registerSettingsIpc(this.databaseService!);
+        registerSettingsIpc(this.databaseService!, { onChanged: () => this.autoExportService?.reload() });
         registerBackupIpc(this.databaseService!, this.mainWindow);
         registerSecurityIpc(this.databaseService!, this.databaseService!.getSecurityService());
         this.registerWindowIpc();
+        this.autoExportService.reload();
         
         // 移除非 macOS 平台的默认菜单栏
         if (process.platform !== 'darwin') {
@@ -146,6 +150,7 @@ class PasswordManagerApp {
       this.mainWindow = null;
       console.info('main window closed');
     });
+    this.autoExportService?.setWindow(this.mainWindow);
   }
 
   public registerWindowIpc(): void {

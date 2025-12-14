@@ -9,6 +9,7 @@ import NoteService from './NoteService';
 import { Group, PasswordItem, PasswordHistory, UserSetting, SecureRecord, SecureRecordGroup } from '../../shared/types';
 
 export default class BackupService {
+  private static zipEncryptedRegistered = false;
   private db: Database.Database;
   private crypto: { encrypt: (t: string) => string; decrypt: (t: string) => string };
   private groups: GroupService;
@@ -268,7 +269,13 @@ export default class BackupService {
   }
 
   private async createZipArchive(data: any, archivePassword?: string): Promise<Uint8Array> {
-    if (archivePassword) archiver.registerFormat('zip-encrypted', zipEncrypted as any);
+    if (archivePassword && !BackupService.zipEncryptedRegistered) {
+      const alreadyRegistered = (archiver as any).isRegisteredFormat?.('zip-encrypted');
+      if (!alreadyRegistered) {
+        archiver.registerFormat('zip-encrypted', zipEncrypted as any);
+      }
+      BackupService.zipEncryptedRegistered = true;
+    }
     const archive = archivePassword ? archiver.create('zip-encrypted', { zlib: { level: 6 }, encryptionMethod: 'zip20', password: archivePassword }) : archiver.create('zip', { zlib: { level: 6 } });
     const out = new PassThrough();
     const chunks: Buffer[] = [];

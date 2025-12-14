@@ -1,6 +1,5 @@
 import { ipcMain, BrowserWindow, dialog, app } from 'electron';
 import * as fs from 'fs';
-import * as path from 'path';
 import DatabaseService from '../database/DatabaseService';
 
 export function registerBackupIpc(db: DatabaseService, win?: BrowserWindow | null) {
@@ -42,7 +41,7 @@ export function registerBackupIpc(db: DatabaseService, win?: BrowserWindow | nul
       const defaultExt = opts.format === 'encrypted_zip' ? 'zip' : 'json';
       const defaultFileName = `passwords_backup_${new Date().toISOString().split('T')[0]}.${defaultExt}`;
       const dialogRes = await dialog.showSaveDialog({
-        defaultPath: opts.defaultPath || path.join(app.getPath('documents'), defaultFileName),
+        defaultPath: opts.defaultPath || defaultFileName,
         filters: [
           { name: opts.format === 'encrypted_zip' ? 'Encrypted Zip' : 'JSON', extensions: [defaultExt] },
           { name: 'All Files', extensions: ['*'] }
@@ -84,6 +83,19 @@ export function registerBackupIpc(db: DatabaseService, win?: BrowserWindow | nul
     try {
       const result = db.repairDataIntegrity();
       return { success: true, data: result };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  });
+
+  ipcMain.handle('pick-export-directory', async (_evt, opts: { defaultPath?: string }) => {
+    try {
+      const dialogRes = await dialog.showOpenDialog({
+        defaultPath: opts.defaultPath || app.getPath('documents'),
+        properties: ['openDirectory', 'createDirectory']
+      });
+      if (dialogRes.canceled) return { success: true, directory: null };
+      return { success: true, directory: dialogRes.filePaths[0] };
     } catch (error) {
       return { success: false, error: (error as Error).message };
     }

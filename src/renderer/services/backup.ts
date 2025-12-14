@@ -18,6 +18,13 @@ export async function pickExportPath(options: { defaultPath?: string; format: Ex
   return res.filePath ?? null;
 }
 
+export async function pickExportDirectory(options: { defaultPath?: string }): Promise<string | null> {
+  if (!window.electronAPI.pickExportDirectory) return null;
+  const res = await window.electronAPI.pickExportDirectory(options);
+  if (!res.success) throw new Error(res.error || 'pick directory failed');
+  return res.directory ?? null;
+}
+
 export async function importData(data: Uint8Array, options: ImportOptions): Promise<ImportResult> {
   const res = await window.electronAPI.importData(Array.from(data), options);
   if (!res.success || !res.data) throw new Error(res.error || 'import failed');

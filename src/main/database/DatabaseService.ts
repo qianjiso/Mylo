@@ -285,6 +285,48 @@ export class DatabaseService {
         type: 'boolean',
         category: 'ui',
         description: '显示密码强度指示器'
+      },
+      {
+        key: 'backup.auto_export_enabled',
+        value: 'false',
+        type: 'boolean',
+        category: 'backup',
+        description: '是否开启自动导出'
+      },
+      {
+        key: 'backup.auto_export_frequency',
+        value: 'daily',
+        type: 'string',
+        category: 'backup',
+        description: '自动导出频率'
+      },
+      {
+        key: 'backup.auto_export_directory',
+        value: '',
+        type: 'string',
+        category: 'backup',
+        description: '自动导出目录'
+      },
+      {
+        key: 'backup.auto_export_format',
+        value: 'json',
+        type: 'string',
+        category: 'backup',
+        description: '自动导出格式'
+      },
+      {
+        key: 'backup.auto_export_password',
+        value: '',
+        type: 'string',
+        category: 'backup',
+        description: '自动导出压缩包密码'
+      },
+      {
+        key: 'backup.auto_export_last_time',
+        value: '',
+        type: 'string',
+        category: 'backup',
+        description: '上次自动导出时间'
       }
     ];
 
@@ -489,6 +531,48 @@ export class DatabaseService {
         type: 'boolean',
         category: 'ui',
         description: '显示密码强度指示器'
+      },
+      {
+        key: 'backup.auto_export_enabled',
+        value: 'false',
+        type: 'boolean',
+        category: 'backup',
+        description: '是否开启自动导出'
+      },
+      {
+        key: 'backup.auto_export_frequency',
+        value: 'daily',
+        type: 'string',
+        category: 'backup',
+        description: '自动导出频率'
+      },
+      {
+        key: 'backup.auto_export_directory',
+        value: '',
+        type: 'string',
+        category: 'backup',
+        description: '自动导出目录'
+      },
+      {
+        key: 'backup.auto_export_format',
+        value: 'json',
+        type: 'string',
+        category: 'backup',
+        description: '自动导出格式'
+      },
+      {
+        key: 'backup.auto_export_password',
+        value: '',
+        type: 'string',
+        category: 'backup',
+        description: '自动导出压缩包密码'
+      },
+      {
+        key: 'backup.auto_export_last_time',
+        value: '',
+        type: 'string',
+        category: 'backup',
+        description: '上次自动导出时间'
       }
     ];
   }

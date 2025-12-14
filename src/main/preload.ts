@@ -99,6 +99,7 @@ export interface ElectronAPI {
     filePath: string;
   }) => Promise<{ success: boolean; filePath?: string | null; error?: string }>;
   pickExportPath: (options: { defaultPath?: string; format: 'json' | 'encrypted_zip' }) => Promise<{ success: boolean; filePath?: string | null; error?: string }>;
+  pickExportDirectory?: (options: { defaultPath?: string }) => Promise<{ success: boolean; directory?: string | null; error?: string }>;
   
   importData: (data: number[], options: {
     format: 'json';
@@ -108,6 +109,7 @@ export interface ElectronAPI {
   }) => Promise<{ success: boolean; data?: any; error?: string }>;
 
   onDataImported: (handler: (payload: { imported: number; skipped: number }) => void) => void;
+  onAutoExportDone?: (handler: (payload: { success: boolean; filePath?: string; error?: string }) => void) => void;
 
   getNoteGroups(): Promise<SecureRecordGroup[]>;
   getNoteGroupTree(parentId?: number): Promise<SecureRecordGroup[]>;
@@ -192,6 +194,7 @@ const electronAPI: ElectronAPI = {
   exportData: (options) => ipcRenderer.invoke('export-data', options),
   exportDataToFile: (options) => ipcRenderer.invoke('export-data-to-file', options),
   pickExportPath: (options) => ipcRenderer.invoke('pick-export-path', options),
+  pickExportDirectory: (options) => ipcRenderer.invoke('pick-export-directory', options),
   importData: (data, options) => ipcRenderer.invoke('import-data', data, options),
   getNoteGroups: () => ipcRenderer.invoke('get-note-groups'),
   getNoteGroupTree: (parentId) => ipcRenderer.invoke('get-note-group-tree', parentId),
@@ -205,6 +208,7 @@ const electronAPI: ElectronAPI = {
   deleteNote: (id) => ipcRenderer.invoke('delete-note', id),
   searchNotesTitle: (keyword) => ipcRenderer.invoke('search-notes-title', keyword),
   onDataImported: (handler) => { ipcRenderer.on('data-imported', (_e, payload) => handler(payload)); },
+  onAutoExportDone: (handler) => { ipcRenderer.on('auto-export-done', (_e, payload) => handler(payload)); },
   getSecurityState: () => ipcRenderer.invoke('security-get-state'),
   setMasterPassword: (password, hint) => ipcRenderer.invoke('security-set-master-password', { password, hint }),
   verifyMasterPassword: (password) => ipcRenderer.invoke('security-verify-master-password', password),
