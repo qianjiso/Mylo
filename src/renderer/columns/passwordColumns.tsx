@@ -50,7 +50,7 @@ const formatUsernamePreview = (raw: string): string => {
     const baseDomain = labels.length >= 2 ? labels.slice(-2).join('.') : domain;
     const domainRendered = hasPrefix ? `**.${baseDomain}` : baseDomain;
 
-    // 普通邮箱：quanss168@yonyou.com -> qua**@yonyou.com
+    // 普通邮箱：quanss168@yonyon.com -> qua**@yonyon.com
     const localA = `${local.slice(0, Math.min(3, local.length))}**`;
     const candidateA = `${localA}@${domainRendered}`;
     if (candidateA.length <= MAX_USERNAME_DISPLAY_LEN) return candidateA;
