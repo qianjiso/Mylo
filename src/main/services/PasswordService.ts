@@ -68,6 +68,20 @@ export class PasswordService {
     });
   }
 
+  /** 导出专用：返回明文用户名和明文密码 */
+  public getPasswordsForExport(): PasswordItem[] {
+    const rows = this.db.prepare('SELECT * FROM passwords ORDER BY created_at DESC').all() as PasswordItem[];
+    return rows.map(p => {
+      const unameRaw = p.username;
+      const unamePlain = this.isEnc(unameRaw) ? this.crypto.decrypt(unameRaw as any) : (unameRaw || '');
+      return {
+        ...p,
+        username: unamePlain,
+        password: p.password ? this.crypto.decrypt(p.password) : ''
+      } as any;
+    });
+  }
+
   /** 按多个分组ID获取密码列表（包含子分组），自动解密 */
   public getPasswordsByGroupIds(groupIds: number[]): PasswordItem[] {
     if (!groupIds || groupIds.length === 0) return this.getPasswords(undefined);

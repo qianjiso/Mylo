@@ -34,7 +34,7 @@ export default class BackupService {
     archivePassword?: string;
   }): Promise<Uint8Array> {
     const data: any = { version: '1.0', exported_at: new Date().toISOString(), app_name: 'Password Manager' };
-    const passwords = this.passwords.getPasswords();
+    const passwords = this.passwords.getPasswordsForExport();
     data.passwords = passwords.map(p => ({ ...p, password: p.password ? p.password : null }));
     const includeGroups = options.includeGroups ?? true;
     if (includeGroups) {
