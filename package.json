@@ -94,7 +94,6 @@
     "directories": {
       "output": "release"
     },
-    "afterSign": "scripts/adhoc-sign.js",
     "files": [
       "dist/**/*",
       "!**/*.map",
@@ -106,6 +105,7 @@
     "asarUnpack": ["**/*.node"],
     "compression": "maximum",
     "mac": {
+      "afterSign": "scripts/adhoc-sign.js",
       "category": "public.app-category.productivity",
       "target": [
         {
@@ -147,8 +147,8 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "your-username",
-      "repo": "password-manager"
+      "owner": "qianjiso",
+      "repo": "Mylo"
     }
   }
 }
