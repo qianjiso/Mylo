@@ -123,14 +123,18 @@ const App: React.FC = () => {
         const shouldLock = state.requireMasterPassword;
         setLocked(shouldLock);
         if (!shouldLock) {
-          await loadGroups();
-          await loadRecentPasswords();
+          await Promise.all([
+            loadGroups(),
+            loadRecentPasswords(),
+          ]);
         }
       } catch (err) {
         console.error('加载安全状态失败', err);
         setLocked(false);
-        await loadGroups();
-        await loadRecentPasswords();
+        await Promise.all([
+          loadGroups(),
+          loadRecentPasswords(),
+        ]);
       } finally {
         setCheckingSecurity(false);
       }

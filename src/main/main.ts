@@ -14,6 +14,7 @@ class PasswordManagerApp {
   private mainWindow: BrowserWindow | null = null;
   private databaseService: DatabaseService | null = null;
   private autoExportService: AutoExportService | null = null;
+  private isQuitting = false;
 
   constructor() {
     try {
@@ -102,6 +103,7 @@ class PasswordManagerApp {
     });
 
     app.on('before-quit', () => {
+      this.isQuitting = true;
       if (this.databaseService) {
         this.databaseService.close();
       }
@@ -145,8 +147,15 @@ class PasswordManagerApp {
       console.info('window ready-to-show');
     });
 
-    // 当窗口关闭时清理
-    this.mainWindow.on('closed', () => {
+    // 当窗口关闭/隐藏时清理或保持
+    this.mainWindow.on('close', (event) => {
+      if (process.platform === 'darwin' && !this.isQuitting) {
+        // macOS 上点击窗口关闭按钮时，仅隐藏窗口以加快下次打开速度
+        event.preventDefault();
+        this.mainWindow?.hide();
+        console.info('main window hidden instead of closed');
+        return;
+      }
       this.mainWindow = null;
       console.info('main window closed');
     });
@@ -166,7 +175,11 @@ class PasswordManagerApp {
       }
     });
     ipcMain.handle('window-close', async () => {
-      this.mainWindow?.close();
+      if (process.platform === 'darwin' && !this.isQuitting) {
+        this.mainWindow?.hide();
+      } else {
+        this.mainWindow?.close();
+      }
     });
     ipcMain.handle('open-external', async (_e, url: string) => {
       if (!url || typeof url !== 'string') return;
