@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Layout, Button, Table, Modal, Form, Input, message, Space, Select, Tabs, Segmented } from 'antd';
 import { PlusOutlined, SettingOutlined, FolderOutlined, FolderAddOutlined, DownloadOutlined, KeyOutlined } from '@ant-design/icons';
-import PasswordGenerator from './components/PasswordGenerator';
+const PasswordGenerator = React.lazy(() => import('./components/PasswordGenerator'));
 import PasswordDetailModal from './components/PasswordDetailModal';
-import UserSettings from './components/UserSettings';
-import ImportExportModal from './components/ImportExportModal';
-import NoteManager from './components/NoteManager';
+const UserSettings = React.lazy(() => import('./components/UserSettings'));
+const ImportExportModal = React.lazy(() => import('./components/ImportExportModal'));
+const NoteManager = React.lazy(() => import('./components/NoteManager'));
 import GroupTree from './components/GroupTree';
 import NoteGroupTree from './components/NoteGroupTree';
 import './styles/global.css';
@@ -654,7 +654,19 @@ const App: React.FC = () => {
                   </h2>
                   <Button type="primary" icon={<PlusOutlined />} onClick={() => setNoteCreateSignal(s => s + 1)}>添加便笺</Button>
                 </div>
-                <NoteManager onClose={() => {}} selectedGroupId={selectedNoteGroupId} externalGroups={noteGroups as any} hideTopFilter createSignal={noteCreateSignal} openNoteId={noteOpenId} openSignal={noteOpenSignal} createTemplate={undefined} templateSignal={0} />
+                <React.Suspense fallback={<div>正在加载便笺模块...</div>}>
+                  <NoteManager
+                    onClose={() => {}}
+                    selectedGroupId={selectedNoteGroupId}
+                    externalGroups={noteGroups as any}
+                    hideTopFilter
+                    createSignal={noteCreateSignal}
+                    openNoteId={noteOpenId}
+                    openSignal={noteOpenSignal}
+                    createTemplate={undefined}
+                    templateSignal={0}
+                  />
+                </React.Suspense>
               </>
             )}
           </Content>
@@ -763,11 +775,13 @@ const App: React.FC = () => {
         />
       </Modal>
 
-      <PasswordGenerator
-        visible={generatorVisible}
-        onClose={() => setGeneratorVisible(false)}
-        onGenerate={handleGeneratePassword}
-      />
+      <React.Suspense fallback={null}>
+        <PasswordGenerator
+          visible={generatorVisible}
+          onClose={() => setGeneratorVisible(false)}
+          onGenerate={handleGeneratePassword}
+        />
+      </React.Suspense>
 
       <Modal
         title="用户设置"
@@ -777,13 +791,17 @@ const App: React.FC = () => {
         width={1000}
         destroyOnHidden
       >
-        <UserSettings onClose={() => setSettingsVisible(false)} />
+        <React.Suspense fallback={<div>正在加载设置...</div>}>
+          <UserSettings onClose={() => setSettingsVisible(false)} />
+        </React.Suspense>
       </Modal>
 
-      <ImportExportModal
-        visible={importExportVisible}
-        onClose={() => setImportExportVisible(false)}
-      />
+      <React.Suspense fallback={null}>
+        <ImportExportModal
+          visible={importExportVisible}
+          onClose={() => setImportExportVisible(false)}
+        />
+      </React.Suspense>
 
       
       <Modal title={editingNoteGroup ? '编辑便笺分组' : '新建便笺分组'} open={noteGroupModalVisible} onCancel={() => setNoteGroupModalVisible(false)} footer={null}>

@@ -2,7 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
-import App from './App';
+const App = React.lazy(() => import('./App'));
 
 // 在浏览器环境中导入mock electronAPI
 if (process.env.NODE_ENV === 'development' && !window.electronAPI) {
@@ -16,7 +16,14 @@ const root = createRoot(container!);
 root.render(
   <React.StrictMode>
     <ConfigProvider locale={zhCN}>
-      <App />
+      <React.Suspense fallback={(
+        <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
+          正在加载应用...
+        </div>
+      )}
+      >
+        <App />
+      </React.Suspense>
     </ConfigProvider>
   </React.StrictMode>
 );
