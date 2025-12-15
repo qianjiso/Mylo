@@ -104,8 +104,8 @@
     "asar": true,
     "asarUnpack": ["**/*.node"],
     "compression": "maximum",
+    "afterSign": "scripts/adhoc-sign.js",
     "mac": {
-      "afterSign": "scripts/adhoc-sign.js",
       "category": "public.app-category.productivity",
       "target": [
         {
