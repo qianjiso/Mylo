@@ -301,6 +301,34 @@ export class DatabaseService {
         description: '自动导出频率'
       },
       {
+        key: 'backup.auto_export_time_of_day',
+        value: '02:00',
+        type: 'string',
+        category: 'backup',
+        description: '自动导出时间（每日/每周/每月，格式 HH:mm）'
+      },
+      {
+        key: 'backup.auto_export_day_of_week',
+        value: '1',
+        type: 'number',
+        category: 'backup',
+        description: '自动导出周几（1=周一 ... 7=周日）'
+      },
+      {
+        key: 'backup.auto_export_day_of_month',
+        value: '1',
+        type: 'number',
+        category: 'backup',
+        description: '自动导出日期（1-31）'
+      },
+      {
+        key: 'backup.auto_export_interval_minutes',
+        value: '60',
+        type: 'number',
+        category: 'backup',
+        description: '自动导出间隔（分钟，every_minute 模式）'
+      },
+      {
         key: 'backup.auto_export_directory',
         value: '',
         type: 'string',
@@ -545,6 +573,34 @@ export class DatabaseService {
         type: 'string',
         category: 'backup',
         description: '自动导出频率'
+      },
+      {
+        key: 'backup.auto_export_time_of_day',
+        value: '02:00',
+        type: 'string',
+        category: 'backup',
+        description: '自动导出时间（每日/每周/每月，格式 HH:mm）'
+      },
+      {
+        key: 'backup.auto_export_day_of_week',
+        value: '1',
+        type: 'number',
+        category: 'backup',
+        description: '自动导出周几（1=周一 ... 7=周日）'
+      },
+      {
+        key: 'backup.auto_export_day_of_month',
+        value: '1',
+        type: 'number',
+        category: 'backup',
+        description: '自动导出日期（1-31）'
+      },
+      {
+        key: 'backup.auto_export_interval_minutes',
+        value: '60',
+        type: 'number',
+        category: 'backup',
+        description: '自动导出间隔（分钟，every_minute 模式）'
       },
       {
         key: 'backup.auto_export_directory',

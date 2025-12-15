@@ -37,6 +37,7 @@ interface UserSettingsProps {
 const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
   const [form] = Form.useForm();
   const autoExportEnabled = Form.useWatch('autoExportEnabled', form);
+  const autoExportFrequency = Form.useWatch('autoExportFrequency', form);
   const [loading, setLoading] = useState(false);
   const [exportModalVisible, setExportModalVisible] = useState(false);
   const { exporting, exportDataToFile } = useBackup();
@@ -67,6 +68,10 @@ const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
       if (key === 'backup.auto_export_directory') key = 'autoExportDirectory';
       if (key === 'backup.auto_export_format') key = 'exportFormat';
       if (key === 'backup.auto_export_password') key = 'exportDefaultPassword';
+      if (key === 'backup.auto_export_time_of_day') key = 'autoExportTimeOfDay';
+      if (key === 'backup.auto_export_day_of_week') key = 'autoExportDayOfWeek';
+      if (key === 'backup.auto_export_day_of_month') key = 'autoExportDayOfMonth';
+      if (key === 'backup.auto_export_interval_minutes') key = 'autoExportIntervalMinutes';
       if (key === 'security.clipboard_clear_timeout') key = 'clipboardClearTime';
       if (setting.type === 'boolean') {
         formData[key] = setting.value === 'true';
@@ -94,6 +99,11 @@ const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
       autoExportEnabled: formData.autoExportEnabled ?? false,
       autoExportFrequency: formData.autoExportFrequency || 'daily',
       autoExportDirectory: formData.autoExportDirectory || '',
+      // 自动导出时间细节
+      autoExportTimeOfDay: formData.autoExportTimeOfDay || '02:00',
+      autoExportDayOfWeek: formData.autoExportDayOfWeek ?? 1,
+      autoExportDayOfMonth: formData.autoExportDayOfMonth ?? 1,
+      autoExportIntervalMinutes: formData.autoExportIntervalMinutes ?? 60,
       requireMasterPassword: secState?.requireMasterPassword ?? formData.requireMasterPassword ?? false,
       autoLockMinutes: secState?.autoLockMinutes ?? formData.autoLockMinutes ?? 5,
       clipboardClearTime: formData.clipboardClearTime ?? 30,
@@ -164,7 +174,21 @@ useEffect(() => {
 
       // 保存其他设置项
       for (const [key, value] of Object.entries(values)) {
-        if (['autoLockMinutes', 'requireMasterPassword', 'autoExportEnabled', 'autoExportFrequency', 'autoExportDirectory', 'exportFormat', 'exportDefaultPassword', 'backupEnabled', 'clipboardClearTime'].includes(key)) continue;
+        if ([
+          'autoLockMinutes',
+          'requireMasterPassword',
+          'autoExportEnabled',
+          'autoExportFrequency',
+          'autoExportDirectory',
+          'exportFormat',
+          'exportDefaultPassword',
+          'backupEnabled',
+          'clipboardClearTime',
+          'autoExportTimeOfDay',
+          'autoExportDayOfWeek',
+          'autoExportDayOfMonth',
+          'autoExportIntervalMinutes',
+        ].includes(key)) continue;
         if (value === undefined) continue;
         await settingsService.setSetting(key, String(value));
       }
@@ -176,6 +200,15 @@ useEffect(() => {
       await settingsService.setSetting('backup.auto_export_enabled', String(autoExportEnabled), 'boolean', 'backup', '是否开启自动导出');
       await settingsService.setSetting('backup.auto_export_frequency', values.autoExportFrequency || 'daily', 'string', 'backup', '自动导出频率');
       await settingsService.setSetting('backupEnabled', String(autoExportEnabled), 'boolean', 'backup', '自动导出开关（兼容）');
+      // 自动导出时间配置
+      const timeOfDay = values.autoExportTimeOfDay || '02:00';
+      await settingsService.setSetting('backup.auto_export_time_of_day', timeOfDay, 'string', 'backup', '自动导出时间（每日/每周/每月，格式 HH:mm）');
+      const dayOfWeek = values.autoExportDayOfWeek ?? 1;
+      await settingsService.setSetting('backup.auto_export_day_of_week', String(dayOfWeek), 'number', 'backup', '自动导出周几（1=周一 ... 7=周日）');
+      const dayOfMonth = values.autoExportDayOfMonth ?? 1;
+      await settingsService.setSetting('backup.auto_export_day_of_month', String(dayOfMonth), 'number', 'backup', '自动导出日期（1-31）');
+      const intervalMinutes = values.autoExportIntervalMinutes ?? 60;
+      await settingsService.setSetting('backup.auto_export_interval_minutes', String(intervalMinutes), 'number', 'backup', '自动导出间隔（分钟，every_minute 模式）');
       await loadSecurityState();
       message.success('设置保存成功');
       if (onClose) onClose();
@@ -403,6 +436,99 @@ useEffect(() => {
                         </Form.Item>
                       </Col>
                     </Row>
+
+                    {/* 自动导出时间配置 */}
+                    {autoExportEnabled && autoExportFrequency === 'every_minute' && (
+                      <Row gutter={16}>
+                        <Col span={12}>
+                          <Form.Item
+                            label="导出间隔（分钟）"
+                            name="autoExportIntervalMinutes"
+                            tooltip="每隔多少分钟自动导出一次"
+                          >
+                            <InputNumber
+                              min={1}
+                              max={1440}
+                              style={{ width: '100%' }}
+                              placeholder="例如 60 表示每 60 分钟"
+                            />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                    )}
+
+                    {autoExportEnabled && autoExportFrequency === 'daily' && (
+                      <Row gutter={16}>
+                        <Col span={12}>
+                          <Form.Item
+                            label="每日执行时间"
+                            name="autoExportTimeOfDay"
+                            tooltip="格式为 HH:mm，例如 18:00"
+                          >
+                            <Input placeholder="例如 18:00" />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                    )}
+
+                    {autoExportEnabled && autoExportFrequency === 'weekly' && (
+                      <Row gutter={16}>
+                        <Col span={12}>
+                          <Form.Item
+                            label="每周执行日"
+                            name="autoExportDayOfWeek"
+                            tooltip="选择每周哪一天执行自动导出"
+                          >
+                            <Select placeholder="选择星期几">
+                              <Option value={1}>周一</Option>
+                              <Option value={2}>周二</Option>
+                              <Option value={3}>周三</Option>
+                              <Option value={4}>周四</Option>
+                              <Option value={5}>周五</Option>
+                              <Option value={6}>周六</Option>
+                              <Option value={7}>周日</Option>
+                            </Select>
+                          </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                          <Form.Item
+                            label="执行时间"
+                            name="autoExportTimeOfDay"
+                            tooltip="格式为 HH:mm，例如 18:00"
+                          >
+                            <Input placeholder="例如 18:00" />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                    )}
+
+                    {autoExportEnabled && autoExportFrequency === 'monthly' && (
+                      <Row gutter={16}>
+                        <Col span={12}>
+                          <Form.Item
+                            label="每月执行日期"
+                            name="autoExportDayOfMonth"
+                            tooltip="1-31，超过当月天数时会自动调整为当月最后一天"
+                          >
+                            <InputNumber
+                              min={1}
+                              max={31}
+                              style={{ width: '100%' }}
+                              placeholder="例如 15 表示每月 15 日"
+                            />
+                          </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                          <Form.Item
+                            label="执行时间"
+                            name="autoExportTimeOfDay"
+                            tooltip="格式为 HH:mm，例如 18:00"
+                          >
+                            <Input placeholder="例如 18:00" />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                    )}
 
                     <Row gutter={16}>
                       <Col span={12}>

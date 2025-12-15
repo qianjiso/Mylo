@@ -173,7 +173,6 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
         <Form
           form={form}
           layout="vertical"
-          disabled={isReadonly}
         >
               <Row gutter={16}>
                 <Col span={24}>
@@ -182,7 +181,10 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
                     name="title"
                     rules={[{ required: true, message: '请输入标题' }]}
                   >
-                    <Input placeholder="请输入密码标题" />
+                    <Input
+                      placeholder="请输入密码标题"
+                      readOnly={isReadonly}
+                    />
                   </Form.Item>
                 </Col>
               </Row>
@@ -196,17 +198,21 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
                   >
                     <Input 
                       placeholder="请输入用户名"
+                      readOnly={isReadonly}
+                      onClick={() => {
+                        if (!isReadonly) return;
+                        const value = form.getFieldValue('username');
+                        if (value) handleCopy(value, '用户名');
+                      }}
                       suffix={
-                        !isReadonly && (
-                          <Button
-                            type="text"
-                            icon={<CopyOutlined />}
-                            onClick={() => {
-                              const value = form.getFieldValue('username');
-                              if (value) handleCopy(value, '用户名');
-                            }}
-                          />
-                        )
+                        <Button
+                          type="text"
+                          icon={<CopyOutlined />}
+                          onClick={() => {
+                            const value = form.getFieldValue('username');
+                            if (value) handleCopy(value, '用户名');
+                          }}
+                        />
                       }
                     />
                   </Form.Item>
@@ -222,24 +228,30 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
                   >
                     <Input.Password
                       placeholder="请输入密码"
+                      readOnly={isReadonly}
+                      onClick={() => {
+                        if (!isReadonly) return;
+                        const value = form.getFieldValue('password');
+                        if (value) handleCopy(value, '密码');
+                      }}
                       visibilityToggle={{
                         visible: showPassword,
                         onVisibleChange: setShowPassword
                       }}
                       suffix={
-                        !isReadonly && (
-                          <Space>
-                            <Button
-                              type="text"
-                              icon={<CopyOutlined />}
-                              onClick={() => {
-                                const value = form.getFieldValue('password');
-                                if (value) handleCopy(value, '密码');
-                              }}
-                            />
+                        <Space>
+                          <Button
+                            type="text"
+                            icon={<CopyOutlined />}
+                            onClick={() => {
+                              const value = form.getFieldValue('password');
+                              if (value) handleCopy(value, '密码');
+                            }}
+                          />
+                          {!isReadonly && (
                             <Button type="text" onClick={() => setPasswordGeneratorVisible(true)}>生成</Button>
-                          </Space>
-                        )
+                          )}
+                        </Space>
                       }
                     />
                   </Form.Item>
@@ -256,17 +268,21 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
                   >
                     <Input 
                       placeholder="请输入网址"
+                      readOnly={isReadonly}
+                      onClick={() => {
+                        if (!isReadonly) return;
+                        const value = form.getFieldValue('url');
+                        if (value) handleCopy(value, 'URL');
+                      }}
                       suffix={
-                        !isReadonly && (
-                          <Button
-                            type="text"
-                            icon={<CopyOutlined />}
-                            onClick={() => {
-                              const value = form.getFieldValue('url');
-                              if (value) handleCopy(value, 'URL');
-                            }}
-                          />
-                        )
+                        <Button
+                          type="text"
+                          icon={<CopyOutlined />}
+                          onClick={() => {
+                            const value = form.getFieldValue('url');
+                            if (value) handleCopy(value, 'URL');
+                          }}
+                        />
                       }
                     />
                   </Form.Item>
@@ -282,6 +298,7 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
                   >
                     <Select 
                       placeholder="请选择分组" 
+                      disabled={isReadonly}
                       allowClear
                       showSearch
                       filterOption={(input, option) =>
@@ -307,6 +324,7 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
                     <TextArea 
                       placeholder="请输入备注信息" 
                       rows={3}
+                      readOnly={isReadonly}
                       maxLength={1000}
                       showCount
                     />

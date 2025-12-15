@@ -85,8 +85,16 @@ class PasswordManagerApp {
        }
       
       app.on('activate', () => {
-        // 在 macOS 上，当单击 dock 图标并且没有其他窗口打开时，
-        // 通常在应用程序中重新创建一个窗口
+        // 在 macOS 上，点击 Dock 图标优先显示/聚焦已存在但隐藏的窗口
+        if (this.mainWindow) {
+          if (!this.mainWindow.isVisible()) {
+            this.mainWindow.show();
+          } else {
+            this.mainWindow.focus();
+          }
+          return;
+        }
+        // 如果没有任何窗口，则重新创建
         if (BrowserWindow.getAllWindows().length === 0) {
           this.createMainWindow();
         }

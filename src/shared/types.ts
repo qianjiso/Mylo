@@ -123,4 +123,12 @@ export interface AutoExportConfig {
   directory: string;
   format: ExportOptions['format'];
   archivePassword?: string;
+  /** 每日/每周/每月执行时间，格式 HH:mm */
+  timeOfDay?: string;
+  /** 每周执行的周几（1=周一 ... 7=周日） */
+  dayOfWeek?: number;
+  /** 每月执行的日期（1-31，超出当月天数时会自动调整为当月最后一天） */
+  dayOfMonth?: number;
+  /** “每分”模式下的执行间隔（单位：分钟），默认 60 */
+  intervalMinutes?: number;
 }
