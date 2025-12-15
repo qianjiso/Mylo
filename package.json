@@ -1,6 +1,6 @@
 {
   "name": "Mylo",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "一个安全的跨平台密码管理应用",
   "main": "dist/main/main.js",
   "homepage": "http://./",
