@@ -427,108 +427,15 @@ useEffect(() => {
                         </Form.Item>
                       </Col>
                       <Col span={12}>
-                        <Form.Item
-                          label="包含大写字母"
-                          name="security.password_generator_include_uppercase"
-                          valuePropName="checked"
-                        >
-                          <Switch />
-                        </Form.Item>
-                      </Col>
-                    </Row>
-
-                    {/* 自动导出时间配置 */}
-                    {autoExportEnabled && autoExportFrequency === 'every_minute' && (
-                      <Row gutter={16}>
-                        <Col span={12}>
-                          <Form.Item
-                            label="导出间隔（分钟）"
-                            name="autoExportIntervalMinutes"
-                            tooltip="每隔多少分钟自动导出一次"
-                          >
-                            <InputNumber
-                              min={1}
-                              max={1440}
-                              style={{ width: '100%' }}
-                              placeholder="例如 60 表示每 60 分钟"
-                            />
-                          </Form.Item>
-                        </Col>
-                      </Row>
-                    )}
-
-                    {autoExportEnabled && autoExportFrequency === 'daily' && (
-                      <Row gutter={16}>
-                        <Col span={12}>
-                          <Form.Item
-                            label="每日执行时间"
-                            name="autoExportTimeOfDay"
-                            tooltip="格式为 HH:mm，例如 18:00"
-                          >
-                            <Input placeholder="例如 18:00" />
-                          </Form.Item>
-                        </Col>
-                      </Row>
-                    )}
-
-                    {autoExportEnabled && autoExportFrequency === 'weekly' && (
-                      <Row gutter={16}>
-                        <Col span={12}>
-                          <Form.Item
-                            label="每周执行日"
-                            name="autoExportDayOfWeek"
-                            tooltip="选择每周哪一天执行自动导出"
-                          >
-                            <Select placeholder="选择星期几">
-                              <Option value={1}>周一</Option>
-                              <Option value={2}>周二</Option>
-                              <Option value={3}>周三</Option>
-                              <Option value={4}>周四</Option>
-                              <Option value={5}>周五</Option>
-                              <Option value={6}>周六</Option>
-                              <Option value={7}>周日</Option>
-                            </Select>
-                          </Form.Item>
-                        </Col>
-                        <Col span={12}>
-                          <Form.Item
-                            label="执行时间"
-                            name="autoExportTimeOfDay"
-                            tooltip="格式为 HH:mm，例如 18:00"
-                          >
-                            <Input placeholder="例如 18:00" />
-                          </Form.Item>
-                        </Col>
-                      </Row>
-                    )}
-
-                    {autoExportEnabled && autoExportFrequency === 'monthly' && (
-                      <Row gutter={16}>
-                        <Col span={12}>
-                          <Form.Item
-                            label="每月执行日期"
-                            name="autoExportDayOfMonth"
-                            tooltip="1-31，超过当月天数时会自动调整为当月最后一天"
-                          >
-                            <InputNumber
-                              min={1}
-                              max={31}
-                              style={{ width: '100%' }}
-                              placeholder="例如 15 表示每月 15 日"
-                            />
-                          </Form.Item>
-                        </Col>
-                        <Col span={12}>
-                          <Form.Item
-                            label="执行时间"
-                            name="autoExportTimeOfDay"
-                            tooltip="格式为 HH:mm，例如 18:00"
-                          >
-                            <Input placeholder="例如 18:00" />
-                          </Form.Item>
-                        </Col>
-                      </Row>
-                    )}
+                    <Form.Item
+                      label="包含大写字母"
+                      name="security.password_generator_include_uppercase"
+                      valuePropName="checked"
+                    >
+                      <Switch />
+                    </Form.Item>
+                  </Col>
+                </Row>
 
                     <Row gutter={16}>
                       <Col span={12}>
@@ -708,11 +615,11 @@ useEffect(() => {
 
                     <Row gutter={16}>
                       <Col span={12}>
-                        <Form.Item
-                          label="自动导出频率"
-                          name="autoExportFrequency"
-                          tooltip="每分钟/每日/每周/每月定期导出到指定目录"
-                        >
+                    <Form.Item
+                      label="自动导出频率"
+                      name="autoExportFrequency"
+                      tooltip="每分钟/每日/每周/每月定期导出到指定目录"
+                    >
                           <Select placeholder="选择自动导出频率" disabled={!autoExportEnabled}>
                             <Option value="every_minute">每分钟</Option>
                             <Option value="daily">每日</Option>
@@ -740,6 +647,99 @@ useEffect(() => {
                         </Form.Item>
                       </Col>
                     </Row>
+
+                    {/* 自动导出时间配置 */}
+                    {autoExportEnabled && autoExportFrequency === 'every_minute' && (
+                      <Row gutter={16}>
+                        <Col span={12}>
+                          <Form.Item
+                            label="导出间隔（分钟）"
+                            name="autoExportIntervalMinutes"
+                            tooltip="每隔多少分钟自动导出一次"
+                          >
+                            <InputNumber
+                              min={1}
+                              max={1440}
+                              style={{ width: '100%' }}
+                              placeholder="例如 60 表示每 60 分钟"
+                            />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                    )}
+
+                    {autoExportEnabled && autoExportFrequency === 'daily' && (
+                      <Row gutter={16}>
+                        <Col span={12}>
+                          <Form.Item
+                            label="每日执行时间"
+                            name="autoExportTimeOfDay"
+                            tooltip="格式为 HH:mm，例如 18:00"
+                          >
+                            <Input placeholder="例如 18:00" />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                    )}
+
+                    {autoExportEnabled && autoExportFrequency === 'weekly' && (
+                      <Row gutter={16}>
+                        <Col span={12}>
+                          <Form.Item
+                            label="每周执行日"
+                            name="autoExportDayOfWeek"
+                            tooltip="选择每周哪一天执行自动导出"
+                          >
+                            <Select placeholder="选择星期几">
+                              <Option value={1}>周一</Option>
+                              <Option value={2}>周二</Option>
+                              <Option value={3}>周三</Option>
+                              <Option value={4}>周四</Option>
+                              <Option value={5}>周五</Option>
+                              <Option value={6}>周六</Option>
+                              <Option value={7}>周日</Option>
+                            </Select>
+                          </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                          <Form.Item
+                            label="执行时间"
+                            name="autoExportTimeOfDay"
+                            tooltip="格式为 HH:mm，例如 18:00"
+                          >
+                            <Input placeholder="例如 18:00" />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                    )}
+
+                    {autoExportEnabled && autoExportFrequency === 'monthly' && (
+                      <Row gutter={16}>
+                        <Col span={12}>
+                          <Form.Item
+                            label="每月执行日期"
+                            name="autoExportDayOfMonth"
+                            tooltip="1-31，超过当月天数时会自动调整为当月最后一天"
+                          >
+                            <InputNumber
+                              min={1}
+                              max={31}
+                              style={{ width: '100%' }}
+                              placeholder="例如 15 表示每月 15 日"
+                            />
+                          </Form.Item>
+                        </Col>
+                        <Col span={12}>
+                          <Form.Item
+                            label="执行时间"
+                            name="autoExportTimeOfDay"
+                            tooltip="格式为 HH:mm，例如 18:00"
+                          >
+                            <Input placeholder="例如 18:00" />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                    )}
 
                     <Row gutter={16}>
                       <Col span={12}>
