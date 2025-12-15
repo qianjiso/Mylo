@@ -76,14 +76,17 @@ const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
     });
     const normalizedExportFormat = normalizeExportFormat(formData.exportFormat);
     return {
-      theme: 'auto',
-      language: 'zh-CN',
-      showPasswordStrength: true,
-      autoSave: false,
-      uiListDensity: 'comfortable',
-      uiFontSize: 'normal',
-      uiCompactSidebar: false,
-      uiShowQuickActions: true,
+      // 先展开后端返回的所有设置项，保证未显式处理的键（如密码生成器相关）也能回填到表单
+      ...formData,
+      // 再按需覆盖 UI 与安全相关的默认值
+      theme: formData.theme || 'auto',
+      language: formData.language || 'zh-CN',
+      showPasswordStrength: formData.showPasswordStrength ?? true,
+      autoSave: formData.autoSave ?? false,
+      uiListDensity: formData.uiListDensity || 'comfortable',
+      uiFontSize: formData.uiFontSize || 'normal',
+      uiCompactSidebar: formData.uiCompactSidebar ?? false,
+      uiShowQuickActions: formData.uiShowQuickActions ?? true,
       exportDefaultPassword: formData.exportDefaultPassword || '',
       exportFormat: normalizedExportFormat,
       autoExportEnabled: formData.autoExportEnabled ?? false,
@@ -91,7 +94,13 @@ const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
       autoExportDirectory: formData.autoExportDirectory || '',
       requireMasterPassword: secState?.requireMasterPassword ?? formData.requireMasterPassword ?? false,
       autoLockMinutes: secState?.autoLockMinutes ?? formData.autoLockMinutes ?? 5,
-      clipboardClearTime: formData.clipboardClearTime ?? 30
+      clipboardClearTime: formData.clipboardClearTime ?? 30,
+      // 密码生成器相关：如有存储值则使用存储值，否则退回到后端默认/内置默认
+      'security.password_generator_length': formData['security.password_generator_length'] ?? 16,
+      'security.password_generator_include_uppercase': formData['security.password_generator_include_uppercase'] ?? true,
+      'security.password_generator_include_lowercase': formData['security.password_generator_include_lowercase'] ?? true,
+      'security.password_generator_include_numbers': formData['security.password_generator_include_numbers'] ?? true,
+      'security.password_generator_include_symbols': formData['security.password_generator_include_symbols'] ?? true,
     };
   }, [normalizeExportFormat]);
 
