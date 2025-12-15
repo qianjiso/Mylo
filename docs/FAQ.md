@@ -86,3 +86,11 @@ npx electron-builder install-app-deps
     - 删除偏好设置： rm -rf ~/Library/Preferences/com.yourcompany.mylo.plist
     - 删除缓存： rm -rf ~/Library/Caches/Mylo
     - 删除保存的会话状态： rm -rf ~/Library/Saved\ Application\ State/com.yourcompany.mylo.savedState
+
+## dock卡顿跳跃问题
+内部测试的临时验证（不用于发布）：
+- 可以对已安装的 app 做一次临时签名看看启动是否顺畅：
+`codesign --force --deep --sign - /Applications/Mylo.app`
+- 然后再跑
+`spctl --assess -vv /Applications/Mylo.app`
+

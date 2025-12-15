@@ -1,6 +1,6 @@
 {
   "name": "Mylo",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "一个安全的跨平台密码管理应用",
   "main": "dist/main/main.js",
   "homepage": "http://./",
@@ -94,6 +94,7 @@
     "directories": {
       "output": "release"
     },
+    "afterSign": "scripts/adhoc-sign.js",
     "files": [
       "dist/**/*",
       "!**/*.map",
