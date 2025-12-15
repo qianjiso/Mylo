@@ -17,6 +17,7 @@
 - `npm run lint`、`lint:fix`、`npm run format`：ESLint + Prettier 规范与修复。
 - 在执行 `npm run lint` 与 `npm run build` 前，可先运行 `nvm use 20` 确认 Node 版本一致。
 - 完成任务后需执行 `npm run lint` 与 `npm run build` 并修复出现的问题再交付。
+ - 代理在对仓库进行任何代码修改（即使用 `apply_patch` 实际变更文件）后，必须在结束回复前执行一次 `npm run lint && npm run build`，并在最终回复中简要说明执行结果。
 
 ## 代码风格与命名
 - TypeScript 默认；2 空格缩进，单引号，必要时尾随逗号。提交前跑 `npm run lint` 和 `npm run format`。

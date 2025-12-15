@@ -17,6 +17,7 @@
 - `npm run lint`, `lint:fix`, `npm run format`: ESLint and Prettier enforcement/fix.
 - Before running `npm run lint` and `npm run build`, you may run `nvm use 20` to ensure the expected Node version.
 - After completing tasks, run `npm run lint` and `npm run build` and resolve any issues found.
+ - After any code modifications performed by the agent (any use of `apply_patch` that changes files), the agent must run `npm run lint && npm run build` before finishing its response, and briefly report the results.
 
 ## Coding Style & Naming Conventions
 - TypeScript-first; 2-space indent, single quotes, trailing commas where reasonable. Run lint + format before pushing.

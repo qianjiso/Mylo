@@ -23,18 +23,78 @@ export interface GroupLite {
   icon?: string;
 }
 
+const MAX_USERNAME_DISPLAY_LEN = 20; // 小于等于 20 个字符
+
+const formatUsernamePreview = (raw: string): string => {
+  if (!raw) return '';
+  const text = raw.trim();
+  if (!text) return '';
+  const isPhoneLike = /^1\d{10}$/.test(text);
+  const isEmailLike = /^[^\s@]+@[^\s@]+$/.test(text);
+
+  if (isPhoneLike) {
+    // 示例：13122024777 -> 131****777
+    const head = text.slice(0, 3);
+    const tail = text.slice(-3);
+    const masked = `${head}****${tail}`;
+    return masked.length > MAX_USERNAME_DISPLAY_LEN
+      ? masked.slice(0, MAX_USERNAME_DISPLAY_LEN)
+      : masked;
+  }
+
+  if (isEmailLike) {
+    const [local, domain] = text.split('@');
+    if (!domain) return text;
+    const labels = domain.split('.');
+    const hasPrefix = labels.length > 2;
+    const baseDomain = labels.length >= 2 ? labels.slice(-2).join('.') : domain;
+    const domainRendered = hasPrefix ? `**.${baseDomain}` : baseDomain;
+
+    // 普通邮箱：quanss168@yonyou.com -> qua**@yonyou.com
+    const localA = `${local.slice(0, Math.min(3, local.length))}**`;
+    const candidateA = `${localA}@${domainRendered}`;
+    if (candidateA.length <= MAX_USERNAME_DISPLAY_LEN) return candidateA;
+
+    // 超长邮箱：s128@17151122305984.onahuyun.com -> s**@**.onahuyun.com
+    const localB = `${local.slice(0, 1)}**`;
+    const candidateB = `${localB}@${domainRendered}`;
+    if (candidateB.length <= MAX_USERNAME_DISPLAY_LEN) return candidateB;
+
+    const head = `${local.slice(0, 1)}**@`;
+    const remain = MAX_USERNAME_DISPLAY_LEN - head.length;
+    if (remain <= 0) return head.slice(0, MAX_USERNAME_DISPLAY_LEN);
+    const trimmedDomain = domainRendered.slice(-remain);
+    return head + trimmedDomain;
+  }
+
+  // 普通字符串：admin -> ad**n
+  if (text.length <= 2) {
+    const maskedLen = Math.min(text.length, MAX_USERNAME_DISPLAY_LEN);
+    return '*'.repeat(maskedLen);
+  }
+  if (text.length === 3) {
+    const res = `${text[0]}**`;
+    return res.length > MAX_USERNAME_DISPLAY_LEN
+      ? res.slice(0, MAX_USERNAME_DISPLAY_LEN)
+      : res;
+  }
+  const res = `${text.slice(0, 2)}**${text.slice(-1)}`;
+  return res.length > MAX_USERNAME_DISPLAY_LEN
+    ? res.slice(0, MAX_USERNAME_DISPLAY_LEN)
+    : res;
+};
+
 const UsernameCell: React.FC<{ text: string; id: number }> = ({ text, id }) => {
   const [open, setOpen] = useState(false);
   const [plain, setPlain] = useState<string | null>(null);
-  const [showPlain, setShowPlain] = useState(false);
-  const display = showPlain && plain ? plain : text;
+  const masked = formatUsernamePreview(text);
+  const tooltipTitle = plain || masked;
   const handleClick = async () => {
     try {
       const full = await window.electronAPI.getPassword?.(id);
       const uname = full?.username || '';
       if (uname) {
         setPlain(uname);
-        setShowPlain(true);
         await navigator.clipboard.writeText(uname);
         message.success('用户名已复制');
         setOpen(true);
@@ -44,10 +104,10 @@ const UsernameCell: React.FC<{ text: string; id: number }> = ({ text, id }) => {
     }
   };
   return (
-    <Tooltip title={display} open={open}>
+    <Tooltip title={tooltipTitle} open={open}>
       <div
         onClick={handleClick}
-        onMouseLeave={() => { setOpen(false); setShowPlain(false); }}
+        onMouseLeave={() => { setOpen(false); }}
         style={{
           display: 'block',
           width: '100%',
@@ -57,7 +117,7 @@ const UsernameCell: React.FC<{ text: string; id: number }> = ({ text, id }) => {
           cursor: 'pointer'
         }}
       >
-        {display}
+        {masked}
       </div>
     </Tooltip>
   );
