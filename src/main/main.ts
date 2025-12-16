@@ -1,13 +1,14 @@
 import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron';
 import * as path from 'path';
 import DatabaseService from './database/DatabaseService';
-import { initLogger, getLogFilePath } from './logger';
+import { initLogger, getLogFilePath, logInfo, logWarn, logError } from './logger';
 import { registerPasswordIpc } from './ipc/passwords';
 import { registerGroupIpc } from './ipc/groups';
 import { registerNotesIpc } from './ipc/notes';
 import { registerSettingsIpc } from './ipc/settings';
 import { registerBackupIpc } from './ipc/backup';
 import { registerSecurityIpc } from './ipc/security';
+import { registerLoggingIpc } from './ipc/logging';
 import AutoExportService from './services/AutoExportService';
 
 class PasswordManagerApp {
@@ -26,10 +27,10 @@ class PasswordManagerApp {
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.warn('set userData failed', msg);
+      logWarn('APP_INIT_USERDATA_FAILED', 'set userData failed', { message: msg });
     }
     initLogger();
-    console.info('app starting');
+    logInfo('APP_START', 'app starting');
     this.init();
   }
 
@@ -42,10 +43,10 @@ class PasswordManagerApp {
     // 当 Electron 完成初始化并准备创建浏览器窗口时调用此方法
     app.whenReady().then(async () => {
       try {
-        console.info('app ready');
+        logInfo('APP_READY', 'app ready');
         // 初始化数据库服务
         this.databaseService = new DatabaseService();
-        console.info('database initialized at', getLogFilePath());
+        logInfo('DB_INIT_SUCCESS', 'database initialized', { logFilePath: getLogFilePath() });
         this.autoExportService = new AutoExportService(this.databaseService);
         
         // 设置IPC处理器（分域注册）
@@ -55,6 +56,7 @@ class PasswordManagerApp {
         registerSettingsIpc(this.databaseService!, { onChanged: () => this.autoExportService?.reload() });
         registerBackupIpc(this.databaseService!, this.mainWindow);
         registerSecurityIpc(this.databaseService!, this.databaseService!.getSecurityService());
+        registerLoggingIpc();
         this.registerWindowIpc();
         this.autoExportService.reload();
         
@@ -67,20 +69,23 @@ class PasswordManagerApp {
           try {
             const exp = await this.databaseService!.exportData({ format: 'json', includeHistory: true, includeGroups: true, includeSettings: true });
             const res = await this.databaseService!.importData(new Uint8Array(exp), { format: 'json', mergeStrategy: 'merge', validateIntegrity: true, dryRun: false });
-            console.info('e2e export/import done', JSON.stringify({ imported: res.imported ?? 0, errors: res.errors?.length || 0 }));
+            logInfo('E2E_EXPORT_IMPORT_DONE', 'e2e export/import done', {
+              imported: res.imported ?? 0,
+              errors: res.errors?.length || 0,
+            });
             app.quit();
             return;
           } catch (err) {
-            console.error('e2e export/import failed', err);
+            logError('E2E_EXPORT_IMPORT_FAILED', 'e2e export/import failed', err instanceof Error ? err : undefined);
             app.quit();
             return;
           }
         }
 
         this.createMainWindow();
-        console.info('main window created');
+        logInfo('MAIN_WINDOW_CREATED', 'main window created');
       } catch (error) {
-        console.error('Failed to initialize app:', error);
+        logError('APP_INIT_FAILED', 'Failed to initialize app', error instanceof Error ? error : undefined);
         app.quit();
        }
       
@@ -152,7 +157,7 @@ class PasswordManagerApp {
         this.mainWindow?.setMenuBarVisibility(false);
       }
       this.mainWindow?.show();
-      console.info('window ready-to-show');
+      logInfo('MAIN_WINDOW_READY', 'window ready-to-show');
     });
 
     // 当窗口关闭/隐藏时清理或保持
@@ -161,11 +166,11 @@ class PasswordManagerApp {
         // macOS 上点击窗口关闭按钮时，仅隐藏窗口以加快下次打开速度
         event.preventDefault();
         this.mainWindow?.hide();
-        console.info('main window hidden instead of closed');
+        logInfo('MAIN_WINDOW_HIDDEN', 'main window hidden instead of closed');
         return;
       }
       this.mainWindow = null;
-      console.info('main window closed');
+      logInfo('MAIN_WINDOW_CLOSED', 'main window closed');
     });
     this.autoExportService?.setWindow(this.mainWindow);
   }
@@ -194,7 +199,7 @@ class PasswordManagerApp {
       try {
         await shell.openExternal(url);
       } catch (err) {
-        console.error('open-external failed', err);
+        logError('OPEN_EXTERNAL_FAILED', 'open-external failed', err instanceof Error ? err : undefined, { url });
       }
     });
   }

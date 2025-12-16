@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type DatabaseService from '../database/DatabaseService';
 import type { AutoExportConfig, AutoExportFrequency } from '../../shared/types';
+import { logError, logInfo } from '../logger';
 
 export class AutoExportService {
   private db: DatabaseService;
@@ -57,6 +58,15 @@ export class AutoExportService {
     const delay = hasLastRun
       ? Math.max(nextMs - nowMs, AutoExportService.FIRST_RUN_DELAY_MS)
       : AutoExportService.FIRST_RUN_DELAY_MS; // 首次开启时尽快执行，避免用户感知“无任务”
+    logInfo('AUTO_EXPORT_SCHEDULED', '自动导出计划已安排', {
+      enabled: config.enabled,
+      frequency: config.frequency,
+      directory: config.directory,
+      format: config.format,
+      hasPassword: !!config.archivePassword,
+      lastTime: config.lastTime,
+      delayMs: delay,
+    });
     this.nextTimer = setTimeout(() => {
       void this.runOnce(config).finally(() => {
         // 任务执行完成后重新读取配置并重新计算下一次运行时间
@@ -170,6 +180,10 @@ export class AutoExportService {
     if (this.isRunning) return;
     this.isRunning = true;
     try {
+      logInfo('AUTO_EXPORT_START', '自动导出开始执行', {
+        format: config.format,
+        frequency: config.frequency,
+      });
       if (config.format === 'encrypted_zip' && (!config.archivePassword || config.archivePassword.length < 4)) {
         throw new Error('自动导出为加密ZIP时需要至少4位的密码');
       }
@@ -187,7 +201,12 @@ export class AutoExportService {
       fs.writeFileSync(filePath, Buffer.from(data));
       this.updateLastRun();
       this.win?.webContents.send('auto-export-done', { success: true, filePath });
+      logInfo('AUTO_EXPORT_SUCCESS', '自动导出完成', { filePath });
     } catch (error) {
+      logError('AUTO_EXPORT_FAILED', '自动导出失败', error instanceof Error ? error : undefined, {
+        directory: config.directory,
+        format: config.format,
+      });
       this.win?.webContents.send('auto-export-done', { success: false, error: (error as Error).message });
     } finally {
       this.isRunning = false;

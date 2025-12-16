@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { message } from 'antd';
 import * as pwdService from '../services/passwords';
+import { reportError } from '../utils/logging';
 
 export interface PasswordItem {
   id: number;
@@ -26,7 +27,7 @@ export function usePasswords() {
       setPasswords((result || []) as any);
     } catch (error) {
       message.error('加载密码失败');
-      console.error('Load passwords error:', error);
+      reportError('PASSWORDS_LOAD_FAILED', 'Load passwords error', error, { groupId });
     } finally {
       setLoading(false);
     }
@@ -38,7 +39,7 @@ export function usePasswords() {
       const result = await pwdService.listPasswords();
       setPasswords((result || []) as any);
     } catch (error) {
-      console.error('Load recent passwords error:', error);
+      reportError('PASSWORDS_LOAD_RECENT_FAILED', 'Load recent passwords error', error);
     } finally {
       setLoading(false);
     }
@@ -50,7 +51,7 @@ export function usePasswords() {
       setPasswordHistory(result as any);
     } catch (error) {
       message.error('加载密码历史失败');
-      console.error('Load password history error:', error);
+      reportError('PASSWORD_HISTORY_LOAD_FAILED', 'Load password history error', error, { passwordId });
     }
   }, []);
 

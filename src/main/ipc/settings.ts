@@ -1,12 +1,13 @@
 import { ipcMain } from 'electron';
 import DatabaseService from '../database/DatabaseService';
+import { logError, logWarn } from '../logger';
 
 export function registerSettingsIpc(db: DatabaseService, options?: { onChanged?: () => void }) {
   const notifyChange = () => {
     try {
       options?.onChanged?.();
     } catch (error) {
-      console.warn('设置变更回调失败', error);
+      logWarn('SETTINGS_CHANGE_CALLBACK_FAILED', '设置变更回调失败', { error: error instanceof Error ? error.message : String(error) });
     }
   };
   ipcMain.handle('get-user-settings', async (_, category?: string) => {
@@ -30,6 +31,7 @@ export function registerSettingsIpc(db: DatabaseService, options?: { onChanged?:
       if (success) notifyChange();
       return { success };
     } catch (error) {
+      logError('IPC_SET_USER_SETTING_FAILED', 'set-user-setting failed', error instanceof Error ? error : undefined, { key });
       return { success: false, error: (error as Error).message };
     }
   });
@@ -40,6 +42,7 @@ export function registerSettingsIpc(db: DatabaseService, options?: { onChanged?:
       if (success) notifyChange();
       return { success };
     } catch (error) {
+      logError('IPC_UPDATE_USER_SETTING_FAILED', 'update-user-setting failed', error instanceof Error ? error : undefined, { key });
       return { success: false, error: (error as Error).message };
     }
   });
@@ -50,6 +53,7 @@ export function registerSettingsIpc(db: DatabaseService, options?: { onChanged?:
       if (success) notifyChange();
       return { success };
     } catch (error) {
+      logError('IPC_DELETE_USER_SETTING_FAILED', 'delete-user-setting failed', error instanceof Error ? error : undefined, { key });
       return { success: false, error: (error as Error).message };
     }
   });
@@ -64,6 +68,7 @@ export function registerSettingsIpc(db: DatabaseService, options?: { onChanged?:
       if (success) notifyChange();
       return { success };
     } catch (error) {
+      logError('IPC_RESET_SETTING_TO_DEFAULT_FAILED', 'reset-setting-to-default failed', error instanceof Error ? error : undefined, { key });
       return { success: false, error: (error as Error).message };
     }
   });
@@ -74,6 +79,7 @@ export function registerSettingsIpc(db: DatabaseService, options?: { onChanged?:
       if (count > 0) notifyChange();
       return { success: true, count };
     } catch (error) {
+      logError('IPC_RESET_ALL_SETTINGS_TO_DEFAULT_FAILED', 'reset-all-settings-to-default failed', error instanceof Error ? error : undefined);
       return { success: false, error: (error as Error).message };
     }
   });
@@ -84,6 +90,7 @@ export function registerSettingsIpc(db: DatabaseService, options?: { onChanged?:
       if (count > 0) notifyChange();
       return { success: true, count };
     } catch (error) {
+      logError('IPC_IMPORT_SETTINGS_FAILED', 'import-settings failed', error instanceof Error ? error : undefined);
       return { success: false, error: (error as Error).message };
     }
   });
@@ -93,6 +100,7 @@ export function registerSettingsIpc(db: DatabaseService, options?: { onChanged?:
       const settings = db.exportSettings(categories);
       return { success: true, data: JSON.stringify(settings) };
     } catch (error) {
+      logError('IPC_EXPORT_SETTINGS_FAILED', 'export-settings failed', error instanceof Error ? error : undefined);
       return { success: false, error: (error as Error).message };
     }
   });

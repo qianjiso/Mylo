@@ -25,6 +25,28 @@ function write(level: string, args: any[]) {
   }
 }
 
+export type LogContext = Record<string, unknown>;
+
+export function logInfo(code: string, message: string, context?: LogContext) {
+  console.info(code, message, context ?? {});
+}
+
+export function logWarn(code: string, message: string, context?: LogContext) {
+  console.warn(code, message, context ?? {});
+}
+
+export function logError(code: string, message: string, error?: unknown, context?: LogContext) {
+  if (error !== undefined && context !== undefined) {
+    console.error(code, message, context, error);
+  } else if (error !== undefined) {
+    console.error(code, message, error);
+  } else if (context !== undefined) {
+    console.error(code, message, context);
+  } else {
+    console.error(code, message);
+  }
+}
+
 export function initLogger() {
   if (initialized) return;
   try {
