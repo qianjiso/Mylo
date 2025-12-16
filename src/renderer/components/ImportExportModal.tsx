@@ -57,7 +57,6 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
       URL.revokeObjectURL(url);
       message.success('数据导出成功');
     } catch (error) {
-      console.error('Export error:', error);
       message.error('导出过程中发生错误');
     } finally {
       setLoading(false);

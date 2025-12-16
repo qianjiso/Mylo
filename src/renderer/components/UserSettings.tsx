@@ -264,7 +264,6 @@ useEffect(() => {
       await exportDataToFile({ ...options, filePath: picked });
       message.success(`已导出到 ${picked}`);
     } catch (error) {
-      console.error('快速导出失败:', error);
       const errMsg = error instanceof Error ? error.message : '快速导出失败';
       message.error(errMsg);
     }
@@ -279,7 +278,6 @@ useEffect(() => {
         form.setFieldsValue({ autoExportDirectory: picked });
       }
     } catch (error) {
-      console.error('选择自动导出目录失败:', error);
       message.error('选择自动导出目录失败');
     } finally {
       setSelectingExportDirectory(false);
