@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Card,
   Form,
@@ -17,12 +17,11 @@ import {
   Alert,
   Input,
   Tabs,
+  Collapse,
 } from 'antd';
-import { SaveOutlined, ReloadOutlined, SafetyCertificateOutlined, ToolOutlined, CloudDownloadOutlined, CloudUploadOutlined, CheckCircleOutlined, ToolTwoTone, FolderOpenOutlined, CloudOutlined } from '@ant-design/icons';
+import { SaveOutlined, ReloadOutlined, SafetyCertificateOutlined, ToolOutlined, CheckCircleOutlined, ToolTwoTone, FolderOpenOutlined, CloudOutlined } from '@ant-design/icons';
 import type { MasterPasswordState, UserSetting } from '../../shared/types';
 import * as settingsService from '../services/settings';
-import ImportExportModal from './ImportExportModal';
-import { useBackup } from '../hooks/useBackup';
 import { useIntegrity } from '../hooks/useIntegrity';
 import { reportError } from '../utils/logging';
 import * as securityService from '../services/security';
@@ -39,9 +38,15 @@ const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
   const [form] = Form.useForm();
   const autoExportEnabled = Form.useWatch('autoExportEnabled', form);
   const autoExportFrequency = Form.useWatch('autoExportFrequency', form);
+  const autoExportDirectory = Form.useWatch('autoExportDirectory', form);
+  const autoExportTimeOfDay = Form.useWatch('autoExportTimeOfDay', form);
+  const autoExportDayOfWeek = Form.useWatch('autoExportDayOfWeek', form);
+  const autoExportDayOfMonth = Form.useWatch('autoExportDayOfMonth', form);
+  const autoExportIntervalMinutes = Form.useWatch('autoExportIntervalMinutes', form);
+  const requireMasterPassword = Form.useWatch('requireMasterPassword', form);
+  const autoLockMinutes = Form.useWatch('autoLockMinutes', form);
+  const clipboardClearTime = Form.useWatch('clipboardClearTime', form);
   const [loading, setLoading] = useState(false);
-  const [exportModalVisible, setExportModalVisible] = useState(false);
-  const { exporting, exportDataToFile } = useBackup();
   const { checking, repairing, report, repairResult, check, repair } = useIntegrity();
   const [securityState, setSecurityState] = useState<MasterPasswordState | null>(null);
   const [masterModalVisible, setMasterModalVisible] = useState(false);
@@ -51,6 +56,32 @@ const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
   const [selectingExportDirectory, setSelectingExportDirectory] = useState(false);
   const [activeTab, setActiveTab] = useState<'security' | 'ui' | 'data'>('security');
   const normalizeExportFormat = useCallback((fmt?: string) => (fmt === 'encrypted_zip' ? 'encrypted_zip' : 'json'), []);
+  const autoExportSummary = useMemo(() => {
+    if (!autoExportEnabled) return '自动导出未开启';
+    const directory = autoExportDirectory || '未选择目录';
+    const weekMap: Record<number, string> = { 1: '周一', 2: '周二', 3: '周三', 4: '周四', 5: '周五', 6: '周六', 7: '周日' };
+    const timeText = autoExportTimeOfDay || '02:00';
+    const dayOfWeekText = weekMap[Number(autoExportDayOfWeek)] || '周一';
+    const dayOfMonthText = autoExportDayOfMonth || 1;
+    if (autoExportFrequency === 'every_minute') {
+      return `每 ${autoExportIntervalMinutes || 60} 分钟导出 · ${directory}`;
+    }
+    if (autoExportFrequency === 'weekly') {
+      return `每周${dayOfWeekText} ${timeText} · ${directory}`;
+    }
+    if (autoExportFrequency === 'monthly') {
+      return `每月${dayOfMonthText} 日 ${timeText} · ${directory}`;
+    }
+    return `每日 ${timeText} · ${directory}`;
+  }, [autoExportEnabled, autoExportDirectory, autoExportFrequency, autoExportIntervalMinutes, autoExportDayOfMonth, autoExportDayOfWeek, autoExportTimeOfDay]);
+  const securitySummary = useMemo(() => {
+    const lock = Math.max(1, Number(autoLockMinutes || 5));
+    if (securityState?.hasMasterPassword) {
+      return requireMasterPassword ? `主密码已启用 · ${lock} 分钟自动锁定` : `主密码已设置 · ${lock} 分钟自动锁定`;
+    }
+    return `主密码未设置 · ${lock} 分钟自动锁定`;
+  }, [autoLockMinutes, requireMasterPassword, securityState]);
+  const clipboardSummary = useMemo(() => `剪贴板 ${clipboardClearTime ?? 30} 秒后清除`, [clipboardClearTime]);
 
   const mapSettingsToForm = useCallback((settingsData: UserSetting[], secState: MasterPasswordState | null) => {
     const formData: Record<string, any> = {};
@@ -242,35 +273,6 @@ useEffect(() => {
     }
   };
 
-  const handleQuickExport = async () => {
-    try {
-      const format = normalizeExportFormat(form.getFieldValue('exportFormat'));
-      const archivePassword = form.getFieldValue('exportDefaultPassword');
-      if (format === 'encrypted_zip' && (!archivePassword || String(archivePassword).length < 4)) {
-        message.error('请先设置至少4位的加密ZIP默认密码');
-        return;
-      }
-      const options = {
-        format,
-        includeHistory: true,
-        includeGroups: true,
-        includeSettings: true,
-        archivePassword: format === 'encrypted_zip' ? archivePassword : undefined
-      } as const;
-      const picked = await backupService.pickExportPath({ format });
-      if (!picked) {
-        message.info('已取消导出');
-        return;
-      }
-      await exportDataToFile({ ...options, filePath: picked });
-      message.success(`已导出到 ${picked}`);
-    } catch (error) {
-      const errMsg = error instanceof Error ? error.message : '快速导出失败';
-      message.error(errMsg);
-      reportError('SETTINGS_QUICK_EXPORT_FAILED', '快速导出失败', error);
-    }
-  };
-
   const handlePickExportDirectory = async () => {
     try {
       setSelectingExportDirectory(true);
@@ -340,536 +342,614 @@ useEffect(() => {
     }
   };
 
-  return (
-    <div style={{ padding: '24px' }}>
-      <Title level={3}>用户设置</Title>
-      
-      <Form
-        form={form}
-        layout="vertical"
-        style={{ marginTop: '24px' }}
-      >
-        <Tabs
-          activeKey={activeTab}
-          onChange={(key) => setActiveTab(key as 'security' | 'ui' | 'data')}
-          items={[
-            {
-              key: 'security',
-              label: '安全与密码',
-              children: (
-                <>
-                  {/* 安全设置 */}
-                  <Card title="安全设置" style={{ marginBottom: '16px' }}>
-                    <Row gutter={16}>
-                      <Col span={12}>
-                        <Form.Item
-                          label="自动锁定时间（分钟）"
-                          name="autoLockMinutes"
-                          tooltip="应用闲置多长时间后自动锁定"
-                        >
-                          <InputNumber
-                            min={1}
-                            max={120}
-                            style={{ width: '100%' }}
-                            placeholder="5"
-                          />
-                        </Form.Item>
-                      </Col>
-                      <Col span={12}>
-                        <Form.Item
-                          label="要求主密码"
-                          name="requireMasterPassword"
-                          tooltip="是否需要主密码才能访问应用"
-                          valuePropName="checked"
-                        >
-                          <Switch />
-                        </Form.Item>
-                      </Col>
-                    </Row>
-                    <Divider>主密码</Divider>
-                    <Space direction="vertical" style={{ width: '100%' }} size="middle">
-                      <Space size="small">
-                        <Tag color={securityState?.hasMasterPassword ? 'green' : 'red'}>
-                          {securityState?.hasMasterPassword ? '已设置' : '未设置'}
-                        </Tag>
-                        <Typography.Text type="secondary">
-                          {securityState?.hasMasterPassword ? '已启用主密码访问控制' : '建议设置主密码以保护数据'}
-                        </Typography.Text>
-                      </Space>
-                      <Space wrap>
-                        <Button
-                          type="primary"
-                          onClick={() => { setMasterMode(securityState?.hasMasterPassword ? 'update' : 'set'); masterForm.resetFields(); setMasterModalVisible(true); }}
-                        >
-                          {securityState?.hasMasterPassword ? '修改主密码' : '设置主密码'}
-                        </Button>
-                        {securityState?.hasMasterPassword && (
-                          <Button danger onClick={() => { setMasterMode('remove'); masterForm.resetFields(); setMasterModalVisible(true); }}>
-                            关闭主密码
-                          </Button>
-                        )}
-                      </Space>
-                    </Space>
-
-                    <Divider>密码生成器设置</Divider>
-
-                    <Row gutter={16}>
-                      <Col span={12}>
-                        <Form.Item
-                          label="默认密码长度"
-                          name="security.password_generator_length"
-                        >
-                          <InputNumber
-                            min={4}
-                            max={64}
-                            style={{ width: '100%' }}
-                            placeholder="16"
-                          />
-                        </Form.Item>
-                      </Col>
-                      <Col span={12}>
+  const tabItems = [
+    {
+      key: 'security',
+      label: '安全与密码',
+      children: (
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <Row gutter={16}>
+            <Col span={14}>
+              <Card size="small" title="访问控制" headStyle={{ fontWeight: 600 }}>
+                <Row gutter={12}>
+                  <Col span={12}>
+                    <Form.Item
+                      label="自动锁定时间（分钟）"
+                      name="autoLockMinutes"
+                      tooltip="应用闲置多长时间后自动锁定"
+                      style={{ marginBottom: 12 }}
+                    >
+                      <InputNumber
+                        min={1}
+                        max={120}
+                        style={{ width: '100%' }}
+                        placeholder="5"
+                      />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item
+                      label="要求主密码"
+                      name="requireMasterPassword"
+                      tooltip="是否需要主密码才能访问应用"
+                      valuePropName="checked"
+                      style={{ marginBottom: 12 }}
+                    >
+                      <Switch />
+                    </Form.Item>
+                  </Col>
+                </Row>
+                <div style={{ background: '#fafbff', border: '1px dashed #e3e7ff', borderRadius: 8, padding: 12 }}>
+                  <Space size="small">
+                    <Tag color={securityState?.hasMasterPassword ? 'green' : 'red'}>
+                      {securityState?.hasMasterPassword ? '已设置' : '未设置'}
+                    </Tag>
+                    <Typography.Text strong>
+                      {securityState?.hasMasterPassword ? '主密码保护开启' : '主密码未开启'}
+                    </Typography.Text>
+                  </Space>
+                  <Typography.Text type="secondary" style={{ marginTop: 4, display: 'block' }}>
+                    {securitySummary}
+                  </Typography.Text>
+                  <Space wrap style={{ marginTop: 12 }}>
+                    <Button
+                      type="primary"
+                      onClick={() => { setMasterMode(securityState?.hasMasterPassword ? 'update' : 'set'); masterForm.resetFields(); setMasterModalVisible(true); }}
+                    >
+                      {securityState?.hasMasterPassword ? '修改主密码' : '设置主密码'}
+                    </Button>
+                    {securityState?.hasMasterPassword && (
+                      <Button danger onClick={() => { setMasterMode('remove'); masterForm.resetFields(); setMasterModalVisible(true); }}>
+                        关闭主密码
+                      </Button>
+                    )}
+                  </Space>
+                </div>
+              </Card>
+            </Col>
+            <Col span={10}>
+              <Card size="small" title="密码生成器" extra={<Tag color="blue">常用</Tag>} headStyle={{ fontWeight: 600 }}>
+                <Row gutter={12}>
+                  <Col span={24}>
+                    <Form.Item
+                      label="默认密码长度"
+                      name="security.password_generator_length"
+                      style={{ marginBottom: 12 }}
+                    >
+                      <InputNumber
+                        min={4}
+                        max={64}
+                        style={{ width: '100%' }}
+                        placeholder="16"
+                      />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
                     <Form.Item
                       label="包含大写字母"
                       name="security.password_generator_include_uppercase"
                       valuePropName="checked"
+                      style={{ marginBottom: 8 }}
+                    >
+                      <Switch />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item
+                      label="包含小写字母"
+                      name="security.password_generator_include_lowercase"
+                      valuePropName="checked"
+                      style={{ marginBottom: 8 }}
+                    >
+                      <Switch />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item
+                      label="包含数字"
+                      name="security.password_generator_include_numbers"
+                      valuePropName="checked"
+                      style={{ marginBottom: 8 }}
+                    >
+                      <Switch />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item
+                      label="包含特殊字符"
+                      name="security.password_generator_include_symbols"
+                      valuePropName="checked"
+                      style={{ marginBottom: 8 }}
+                    >
+                      <Switch />
+                    </Form.Item>
+                  </Col>
+                </Row>
+              </Card>
+            </Col>
+          </Row>
+        </Space>
+      ),
+    },
+    {
+      key: 'ui',
+      label: '界面与体验',
+      children: (
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <Card size="small" title="界面设置" extra={<Tag color="gold">清爽</Tag>} headStyle={{ fontWeight: 600 }}>
+            <Row gutter={12}>
+              <Col span={12}>
+                <Form.Item
+                  label="主题"
+                  name="theme"
+                  style={{ marginBottom: 12 }}
+                >
+                  <Select placeholder="选择主题">
+                    <Option value="light">浅色主题</Option>
+                    <Option value="dark">深色主题</Option>
+                    <Option value="auto">跟随系统</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  label="语言"
+                  name="language"
+                  style={{ marginBottom: 12 }}
+                >
+                  <Select placeholder="选择语言">
+                    <Option value="zh-CN">简体中文</Option>
+                    <Option value="en-US">English</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Row gutter={12}>
+              <Col span={12}>
+                <Form.Item
+                  label="显示密码强度"
+                  name="showPasswordStrength"
+                  valuePropName="checked"
+                  tooltip="在密码输入框下方显示密码强度指示器"
+                  style={{ marginBottom: 12 }}
+                >
+                  <Switch />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  label="自动保存"
+                  name="autoSave"
+                  valuePropName="checked"
+                  tooltip="编辑时自动保存密码"
+                  style={{ marginBottom: 12 }}
+                >
+                  <Switch />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Row gutter={12}>
+              <Col span={12}>
+                <Form.Item
+                  label="列表密度"
+                  name="uiListDensity"
+                  tooltip="影响表格、列表等组件的间距"
+                  style={{ marginBottom: 12 }}
+                >
+                  <Select placeholder="选择列表密度">
+                    <Option value="comfortable">标准</Option>
+                    <Option value="compact">紧凑</Option>
+                    <Option value="spacious">宽松</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  label="界面字体大小"
+                  name="uiFontSize"
+                  style={{ marginBottom: 12 }}
+                >
+                  <Select placeholder="选择字体大小">
+                    <Option value="small">小</Option>
+                    <Option value="normal">中</Option>
+                    <Option value="large">大</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Row gutter={12}>
+              <Col span={12}>
+                <Form.Item
+                  label="侧边栏紧凑模式"
+                  name="uiCompactSidebar"
+                  valuePropName="checked"
+                  tooltip="减少侧边栏宽度，更多空间留给内容区"
+                  style={{ marginBottom: 0 }}
+                >
+                  <Switch />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item
+                  label="显示快捷操作按钮"
+                  name="uiShowQuickActions"
+                  valuePropName="checked"
+                  tooltip="在列表行内显示常用操作按钮"
+                  style={{ marginBottom: 0 }}
+                >
+                  <Switch />
+                </Form.Item>
+              </Col>
+            </Row>
+          </Card>
+        </Space>
+      ),
+    },
+    {
+      key: 'data',
+      label: '备份与数据',
+      children: (
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <Row gutter={16}>
+            <Col span={14}>
+              <Card size="small" title="导出与自动备份" extra={<Tag color="geekblue">计划</Tag>} headStyle={{ fontWeight: 600 }}>
+                <Row gutter={12}>
+                  <Col span={12}>
+                    <Form.Item
+                      label="默认导出格式"
+                      name="exportFormat"
+                      style={{ marginBottom: 12 }}
+                    >
+                      <Select placeholder="选择导出格式">
+                        <Option value="json">JSON</Option>
+                        <Option value="encrypted_zip">加密ZIP</Option>
+                      </Select>
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item
+                      label="启用自动导出"
+                      name="autoExportEnabled"
+                      valuePropName="checked"
+                      style={{ marginBottom: 12 }}
                     >
                       <Switch />
                     </Form.Item>
                   </Col>
                 </Row>
 
-                    <Row gutter={16}>
-                      <Col span={12}>
-                        <Form.Item
-                          label="包含小写字母"
-                          name="security.password_generator_include_lowercase"
-                          valuePropName="checked"
-                        >
-                          <Switch />
-                        </Form.Item>
-                      </Col>
-                      <Col span={12}>
-                        <Form.Item
-                          label="包含数字"
-                          name="security.password_generator_include_numbers"
-                          valuePropName="checked"
-                        >
-                          <Switch />
-                        </Form.Item>
-                      </Col>
-                    </Row>
-
-                    <Row gutter={16}>
-                      <Col span={12}>
-                        <Form.Item
-                          label="包含特殊字符"
-                          name="security.password_generator_include_symbols"
-                          valuePropName="checked"
-                        >
-                          <Switch />
-                        </Form.Item>
-                      </Col>
-                    </Row>
-                  </Card>
-                </>
-              ),
-            },
-            {
-              key: 'ui',
-              label: '界面与体验',
-              children: (
-                <>
-                  {/* UI设置 */}
-                  <Card title={<Space size={8}><span>界面设置</span><Tag color="orange">待开发</Tag></Space>} style={{ marginBottom: '16px' }}>
-                    <Row gutter={16}>
-                      <Col span={12}>
-                        <Form.Item
-                          label="主题"
-                          name="theme"
-                        >
-                          <Select placeholder="选择主题">
-                            <Option value="light">浅色主题</Option>
-                            <Option value="dark">深色主题</Option>
-                            <Option value="auto">跟随系统</Option>
-                          </Select>
-                        </Form.Item>
-                      </Col>
-                      <Col span={12}>
-                        <Form.Item
-                          label="语言"
-                          name="language"
-                        >
-                          <Select placeholder="选择语言">
-                            <Option value="zh-CN">简体中文</Option>
-                            <Option value="en-US">English</Option>
-                          </Select>
-                        </Form.Item>
-                      </Col>
-                    </Row>
-
-                    <Row gutter={16}>
-                      <Col span={12}>
-                        <Form.Item
-                          label="显示密码强度"
-                          name="showPasswordStrength"
-                          valuePropName="checked"
-                          tooltip="在密码输入框下方显示密码强度指示器"
-                        >
-                          <Switch />
-                        </Form.Item>
-                      </Col>
-                      <Col span={12}>
-                        <Form.Item
-                          label="自动保存"
-                          name="autoSave"
-                          valuePropName="checked"
-                          tooltip="编辑时自动保存密码"
-                        >
-                          <Switch />
-                        </Form.Item>
-                      </Col>
-                    </Row>
-
-                    <Row gutter={16}>
-                      <Col span={12}>
-                        <Form.Item
-                          label="列表密度"
-                          name="uiListDensity"
-                          tooltip="影响表格、列表等组件的间距"
-                        >
-                          <Select placeholder="选择列表密度">
-                            <Option value="comfortable">标准</Option>
-                            <Option value="compact">紧凑</Option>
-                            <Option value="spacious">宽松</Option>
-                          </Select>
-                        </Form.Item>
-                      </Col>
-                      <Col span={12}>
-                        <Form.Item
-                          label="界面字体大小"
-                          name="uiFontSize"
-                        >
-                          <Select placeholder="选择字体大小">
-                            <Option value="small">小</Option>
-                            <Option value="normal">中</Option>
-                            <Option value="large">大</Option>
-                          </Select>
-                        </Form.Item>
-                      </Col>
-                    </Row>
-
-                    <Row gutter={16}>
-                      <Col span={12}>
-                        <Form.Item
-                          label="侧边栏紧凑模式"
-                          name="uiCompactSidebar"
-                          valuePropName="checked"
-                          tooltip="减少侧边栏宽度，更多空间留给内容区"
-                        >
-                          <Switch />
-                        </Form.Item>
-                      </Col>
-                      <Col span={12}>
-                        <Form.Item
-                          label="显示快捷操作按钮"
-                          name="uiShowQuickActions"
-                          valuePropName="checked"
-                          tooltip="在列表行内显示常用操作按钮"
-                        >
-                          <Switch />
-                        </Form.Item>
-                      </Col>
-                    </Row>
-                  </Card>
-                </>
-              ),
-            },
-            {
-              key: 'data',
-              label: '备份与数据',
-              children: (
-                <>
-                  {/* 数据管理设置 */}
-                  <Card title="数据管理" style={{ marginBottom: '16px' }}>
-                    <Row gutter={16}>
-                      <Col span={12}>
-                        <Form.Item
-                          label="默认导出格式"
-                          name="exportFormat"
-                        >
-                          <Select placeholder="选择导出格式">
-                            <Option value="json">JSON</Option>
-                            <Option value="encrypted_zip">加密ZIP</Option>
-                          </Select>
-                        </Form.Item>
-                      </Col>
-                      <Col span={12}>
-                        <Form.Item
-                          label="启用自动导出"
-                          name="autoExportEnabled"
-                          valuePropName="checked"
-                        >
-                          <Switch />
-                        </Form.Item>
-                      </Col>
-                    </Row>
-
-                    <Row gutter={16}>
-                      <Col span={12}>
+                <Row gutter={12}>
+                  <Col span={12}>
                     <Form.Item
                       label="自动导出频率"
                       name="autoExportFrequency"
                       tooltip="每分钟/每日/每周/每月定期导出到指定目录"
+                      style={{ marginBottom: 12 }}
                     >
-                          <Select placeholder="选择自动导出频率" disabled={!autoExportEnabled}>
-                            <Option value="every_minute">每分钟</Option>
-                            <Option value="daily">每日</Option>
-                            <Option value="weekly">每周</Option>
-                            <Option value="monthly">每月</Option>
-                          </Select>
-                        </Form.Item>
-                      </Col>
-                      <Col span={12}>
-                        <Form.Item
-                          label="自动导出目录"
-                          name="autoExportDirectory"
-                          tooltip="必须选择导出目录，未选择时自动导出不会运行"
-                        >
-                          <Input
-                            placeholder="选择自动导出保存目录"
-                            readOnly
-                            disabled={!autoExportEnabled}
-                            addonAfter={
-                              <Button size="small" icon={<FolderOpenOutlined />} onClick={handlePickExportDirectory} loading={selectingExportDirectory} disabled={!autoExportEnabled}>
-                                选择
-                              </Button>
-                            }
-                          />
-                        </Form.Item>
-                      </Col>
-                    </Row>
-
-                    {/* 自动导出时间配置 */}
-                    {autoExportEnabled && autoExportFrequency === 'every_minute' && (
-                      <Row gutter={16}>
-                        <Col span={12}>
-                          <Form.Item
-                            label="导出间隔（分钟）"
-                            name="autoExportIntervalMinutes"
-                            tooltip="每隔多少分钟自动导出一次"
-                          >
-                            <InputNumber
-                              min={1}
-                              max={1440}
-                              style={{ width: '100%' }}
-                              placeholder="例如 60 表示每 60 分钟"
-                            />
-                          </Form.Item>
-                        </Col>
-                      </Row>
-                    )}
-
-                    {autoExportEnabled && autoExportFrequency === 'daily' && (
-                      <Row gutter={16}>
-                        <Col span={12}>
-                          <Form.Item
-                            label="每日执行时间"
-                            name="autoExportTimeOfDay"
-                            tooltip="格式为 HH:mm，例如 18:00"
-                          >
-                            <Input placeholder="例如 18:00" />
-                          </Form.Item>
-                        </Col>
-                      </Row>
-                    )}
-
-                    {autoExportEnabled && autoExportFrequency === 'weekly' && (
-                      <Row gutter={16}>
-                        <Col span={12}>
-                          <Form.Item
-                            label="每周执行日"
-                            name="autoExportDayOfWeek"
-                            tooltip="选择每周哪一天执行自动导出"
-                          >
-                            <Select placeholder="选择星期几">
-                              <Option value={1}>周一</Option>
-                              <Option value={2}>周二</Option>
-                              <Option value={3}>周三</Option>
-                              <Option value={4}>周四</Option>
-                              <Option value={5}>周五</Option>
-                              <Option value={6}>周六</Option>
-                              <Option value={7}>周日</Option>
-                            </Select>
-                          </Form.Item>
-                        </Col>
-                        <Col span={12}>
-                          <Form.Item
-                            label="执行时间"
-                            name="autoExportTimeOfDay"
-                            tooltip="格式为 HH:mm，例如 18:00"
-                          >
-                            <Input placeholder="例如 18:00" />
-                          </Form.Item>
-                        </Col>
-                      </Row>
-                    )}
-
-                    {autoExportEnabled && autoExportFrequency === 'monthly' && (
-                      <Row gutter={16}>
-                        <Col span={12}>
-                          <Form.Item
-                            label="每月执行日期"
-                            name="autoExportDayOfMonth"
-                            tooltip="1-31，超过当月天数时会自动调整为当月最后一天"
-                          >
-                            <InputNumber
-                              min={1}
-                              max={31}
-                              style={{ width: '100%' }}
-                              placeholder="例如 15 表示每月 15 日"
-                            />
-                          </Form.Item>
-                        </Col>
-                        <Col span={12}>
-                          <Form.Item
-                            label="执行时间"
-                            name="autoExportTimeOfDay"
-                            tooltip="格式为 HH:mm，例如 18:00"
-                          >
-                            <Input placeholder="例如 18:00" />
-                          </Form.Item>
-                        </Col>
-                      </Row>
-                    )}
-
-                    <Row gutter={16}>
-                      <Col span={12}>
-                        <Form.Item
-                          label="加密ZIP默认密码"
-                          name="exportDefaultPassword"
-                          tooltip="用于加密ZIP导出，至少4位。未设置则无法快速导出加密包。"
-                          rules={[{ min: 4, message: '至少4位' }]}
-                        >
-                          <Input.Password placeholder="可选，至少4位" />
-                        </Form.Item>
-                      </Col>
-                    </Row>
-
-                    <Row gutter={16}>
-                      <Col span={12}>
-                        <Form.Item
-                          label="剪贴板清除时间（秒）"
-                          name="clipboardClearTime"
-                          tooltip="复制密码到剪贴板后，多长时间自动清除"
-                        >
-                          <InputNumber
-                            min={5}
-                            max={300}
-                            style={{ width: '100%' }}
-                            placeholder="30"
-                          />
-                        </Form.Item>
-                      </Col>
-                      <Col span={12}>
-                        <Space style={{ marginTop: 30 }} size={8}>
-                          <Button icon={<CloudOutlined />} disabled>
-                            云盘备份（待开发）
+                      <Select placeholder="选择自动导出频率" disabled={!autoExportEnabled}>
+                        <Option value="every_minute">每分钟</Option>
+                        <Option value="daily">每日</Option>
+                        <Option value="weekly">每周</Option>
+                        <Option value="monthly">每月</Option>
+                      </Select>
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item
+                      label="自动导出目录"
+                      name="autoExportDirectory"
+                      tooltip="必须选择导出目录，未选择时自动导出不会运行"
+                      style={{ marginBottom: 12 }}
+                    >
+                      <Input
+                        placeholder="选择自动导出保存目录"
+                        readOnly
+                        disabled={!autoExportEnabled}
+                        addonAfter={
+                          <Button size="small" icon={<FolderOpenOutlined />} onClick={handlePickExportDirectory} loading={selectingExportDirectory} disabled={!autoExportEnabled}>
+                            选择
                           </Button>
-                          <Tag color="default">即将推出</Tag>
-                        </Space>
-                      </Col>
-                    </Row>
-                  </Card>
+                        }
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
 
-                  {/* 备份与完整性 */}
-                  <Card title="备份与完整性" style={{ marginBottom: '16px' }}>
-                    <Space wrap>
-                      <Button icon={<CloudDownloadOutlined />} onClick={handleQuickExport} loading={exporting}>
-                        快速导出（JSON）
-                      </Button>
-                      <Button icon={<CloudUploadOutlined />} onClick={() => setExportModalVisible(true)}>
-                        打开导入/导出窗口
-                      </Button>
-                      <Button icon={<SafetyCertificateOutlined />} onClick={handleCheckIntegrity} loading={checking}>
-                        检查数据完整性
-                      </Button>
-                      <Button icon={<ToolOutlined />} onClick={handleRepairIntegrity} loading={repairing}>
-                        修复数据完整性
-                      </Button>
-                    </Space>
+                {autoExportEnabled && autoExportFrequency === 'every_minute' && (
+                  <Row gutter={12}>
+                    <Col span={12}>
+                      <Form.Item
+                        label="导出间隔（分钟）"
+                        name="autoExportIntervalMinutes"
+                        tooltip="每隔多少分钟自动导出一次"
+                        style={{ marginBottom: 12 }}
+                      >
+                        <InputNumber
+                          min={1}
+                          max={1440}
+                          style={{ width: '100%' }}
+                          placeholder="例如 60 表示每 60 分钟"
+                        />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                )}
 
-                    <Divider />
-                    <Row gutter={16}>
-                      <Col span={12}>
-                        <Title level={5}>
-                          <CheckCircleOutlined /> 检查结果
-                        </Title>
-                        <div style={{ maxHeight: 200, overflow: 'auto', border: '1px solid #f0f0f0', padding: 8 }}>
-                          {report ? (
-                            <div>
-                              <div>错误 {report.errors.length}，警告 {report.warnings.length}</div>
-                              {report.errors.map((e, idx) => (
-                                <div key={`err-${idx}`} style={{ color: '#cf1322' }}>{e}</div>
-                              ))}
-                              {report.warnings.map((w, idx) => (
-                                <div key={`warn-${idx}`} style={{ color: '#faad14' }}>{w}</div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div>尚未执行检查</div>
-                          )}
-                        </div>
-                      </Col>
-                      <Col span={12}>
-                        <Title level={5}>
-                          <ToolTwoTone twoToneColor="#52c41a" /> 修复结果
-                        </Title>
-                        <div style={{ maxHeight: 200, overflow: 'auto', border: '1px solid #f0f0f0', padding: 8 }}>
-                          {repairResult ? (
-                            <div>
-                              <div>已修复 {repairResult.repaired.length}，失败 {repairResult.failed.length}</div>
-                              {repairResult.repaired.map((r, idx) => (
-                                <div key={`rep-${idx}`} style={{ color: '#52c41a' }}>{r}</div>
-                              ))}
-                              {repairResult.failed.map((f, idx) => (
-                                <div key={`fail-${idx}`} style={{ color: '#cf1322' }}>{f}</div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div>尚未执行修复</div>
-                          )}
-                        </div>
-                      </Col>
-                    </Row>
-                  </Card>
-                </>
-              ),
-            },
-          ]}
-        />
+                {autoExportEnabled && autoExportFrequency === 'daily' && (
+                  <Row gutter={12}>
+                    <Col span={12}>
+                      <Form.Item
+                        label="每日执行时间"
+                        name="autoExportTimeOfDay"
+                        tooltip="格式为 HH:mm，例如 18:00"
+                        style={{ marginBottom: 12 }}
+                      >
+                        <Input placeholder="例如 18:00" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                )}
 
-        {/* 操作按钮 */}
-        <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
-          <Space size="middle">
-            <Button
-              type="default"
-              icon={<ReloadOutlined />}
-              onClick={handleReset}
-              loading={loading}
-            >
-              重置为默认
-            </Button>
-            <Button
-              type="primary"
-              icon={<SaveOutlined />}
-              onClick={handleSave}
-              loading={loading}
-            >
-              保存设置
-            </Button>
+                {autoExportEnabled && autoExportFrequency === 'weekly' && (
+                  <Row gutter={12}>
+                    <Col span={12}>
+                      <Form.Item
+                        label="每周执行日"
+                        name="autoExportDayOfWeek"
+                        tooltip="选择每周哪一天执行自动导出"
+                        style={{ marginBottom: 12 }}
+                      >
+                        <Select placeholder="选择星期几">
+                          <Option value={1}>周一</Option>
+                          <Option value={2}>周二</Option>
+                          <Option value={3}>周三</Option>
+                          <Option value={4}>周四</Option>
+                          <Option value={5}>周五</Option>
+                          <Option value={6}>周六</Option>
+                          <Option value={7}>周日</Option>
+                        </Select>
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item
+                        label="执行时间"
+                        name="autoExportTimeOfDay"
+                        tooltip="格式为 HH:mm，例如 18:00"
+                        style={{ marginBottom: 12 }}
+                      >
+                        <Input placeholder="例如 18:00" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                )}
+
+                {autoExportEnabled && autoExportFrequency === 'monthly' && (
+                  <Row gutter={12}>
+                    <Col span={12}>
+                      <Form.Item
+                        label="每月执行日期"
+                        name="autoExportDayOfMonth"
+                        tooltip="1-31，超过当月天数时会自动调整为当月最后一天"
+                        style={{ marginBottom: 12 }}
+                      >
+                        <InputNumber
+                          min={1}
+                          max={31}
+                          style={{ width: '100%' }}
+                          placeholder="例如 15 表示每月 15 日"
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item
+                        label="执行时间"
+                        name="autoExportTimeOfDay"
+                        tooltip="格式为 HH:mm，例如 18:00"
+                        style={{ marginBottom: 12 }}
+                      >
+                        <Input placeholder="例如 18:00" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                )}
+
+                <Row gutter={12}>
+                  <Col span={12}>
+                    <Form.Item
+                      label="加密ZIP默认密码"
+                      name="exportDefaultPassword"
+                      tooltip="用于加密ZIP导出，至少4位。未设置则无法快速导出加密包。"
+                      rules={[{ min: 4, message: '至少4位' }]}
+                      style={{ marginBottom: 12 }}
+                    >
+                      <Input.Password placeholder="可选，至少4位" />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item
+                      label="剪贴板清除时间（秒）"
+                      name="clipboardClearTime"
+                      tooltip="复制密码到剪贴板后，多长时间自动清除"
+                      style={{ marginBottom: 12 }}
+                    >
+                      <InputNumber
+                        min={5}
+                        max={300}
+                        style={{ width: '100%' }}
+                        placeholder="30"
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
+
+                <Space style={{ marginTop: 4 }} size={8}>
+                  <Button icon={<CloudOutlined />} disabled>
+                    云盘备份（待开发）
+                  </Button>
+                  <Tag color="default">即将推出</Tag>
+                </Space>
+              </Card>
+            </Col>
+            <Col span={10}>
+              <Card
+                size="small"
+                title="数据健康"
+                extra={(
+                  <Space size="small">
+                    <Tag color="green">快照</Tag>
+                    <Button size="small" icon={<SafetyCertificateOutlined />} onClick={handleCheckIntegrity} loading={checking}>
+                      检查
+                    </Button>
+                    <Button size="small" icon={<ToolOutlined />} onClick={handleRepairIntegrity} loading={repairing}>
+                      修复
+                    </Button>
+                  </Space>
+                )}
+                headStyle={{ fontWeight: 600 }}
+              >
+                <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                  <div>
+                    <Typography.Text strong>自动导出</Typography.Text>
+                    <br />
+                    <Typography.Text style={{ color: autoExportEnabled ? '#389e0d' : '#8c8c8c' }}>
+                      {autoExportSummary}
+                    </Typography.Text>
+                  </div>
+                  <div>
+                    <Typography.Text strong>安全与剪贴板</Typography.Text>
+                    <br />
+                    <Typography.Text type="secondary">{clipboardSummary}</Typography.Text>
+                  </div>
+                  <Collapse
+                    ghost
+                    defaultActiveKey={report || repairResult ? ['report'] : []}
+                    items={[
+                      {
+                        key: 'report',
+                        label: (
+                          <Space size={8}>
+                            <CheckCircleOutlined />
+                            <span>检查结果{report ? `（错误 ${report.errors.length} · 警告 ${report.warnings.length}）` : ''}</span>
+                          </Space>
+                        ),
+                        children: (
+                          <div style={{ maxHeight: 180, overflow: 'auto', padding: '4px 4px 0' }}>
+                            {report ? (
+                              <div>
+                                <div style={{ marginBottom: 6 }}>错误 {report.errors.length}，警告 {report.warnings.length}</div>
+                                {report.errors.map((e, idx) => (
+                                  <div key={`err-${idx}`} style={{ color: '#cf1322' }}>{e}</div>
+                                ))}
+                                {report.warnings.map((w, idx) => (
+                                  <div key={`warn-${idx}`} style={{ color: '#faad14' }}>{w}</div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div>尚未执行检查</div>
+                            )}
+                          </div>
+                        ),
+                      },
+                      {
+                        key: 'repair',
+                        label: (
+                          <Space size={8}>
+                            <ToolTwoTone twoToneColor="#52c41a" />
+                            <span>修复结果{repairResult ? `（已修复 ${repairResult.repaired.length} · 失败 ${repairResult.failed.length}）` : ''}</span>
+                          </Space>
+                        ),
+                        children: (
+                          <div style={{ maxHeight: 180, overflow: 'auto', padding: '4px 4px 0' }}>
+                            {repairResult ? (
+                              <div>
+                                <div style={{ marginBottom: 6 }}>已修复 {repairResult.repaired.length}，失败 {repairResult.failed.length}</div>
+                                {repairResult.repaired.map((r, idx) => (
+                                  <div key={`rep-${idx}`} style={{ color: '#52c41a' }}>{r}</div>
+                                ))}
+                                {repairResult.failed.map((f, idx) => (
+                                  <div key={`fail-${idx}`} style={{ color: '#cf1322' }}>{f}</div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div>尚未执行修复</div>
+                            )}
+                          </div>
+                        ),
+                      },
+                    ]}
+                  />
+                </Space>
+              </Card>
+            </Col>
+          </Row>
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <div style={{ padding: '8px 0' }}>
+      <Card
+        bordered={false}
+        style={{ borderRadius: 12, background: 'linear-gradient(120deg, #f3f6ff 0%, #ffffff 100%)', boxShadow: '0 10px 30px rgba(0,0,0,0.04)' }}
+        bodyStyle={{ padding: '12px 16px' }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <Title level={4} style={{ margin: 0 }}>用户设置</Title>
+            <Typography.Text type="secondary">分栏视图让你无需下拉即可完成常用操作</Typography.Text>
+          </div>
+          <Space size="small">
+            <Tag color={securityState?.hasMasterPassword ? 'green' : 'orange'}>{securityState?.hasMasterPassword ? '主密码已开启' : '主密码未开启'}</Tag>
+            <Tag color={autoExportEnabled ? 'blue' : 'default'}>{autoExportEnabled ? '自动导出开启' : '自动导出关闭'}</Tag>
           </Space>
         </div>
+      </Card>
+
+      <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <Space size="small" wrap>
+          <Typography.Text type="secondary">{securitySummary}</Typography.Text>
+          <Divider type="vertical" style={{ margin: '0 8px' }} />
+          <Typography.Text type="secondary">{autoExportSummary}</Typography.Text>
+          <Divider type="vertical" style={{ margin: '0 8px' }} />
+          <Typography.Text type="secondary">{clipboardSummary}</Typography.Text>
+        </Space>
+      </div>
+
+      <Form
+        form={form}
+        layout="vertical"
+        size="middle"
+        style={{ marginTop: 12 }}
+      >
+        <Tabs
+          activeKey={activeTab}
+          onChange={(key) => setActiveTab(key as 'security' | 'ui' | 'data')}
+          items={tabItems}
+        />
       </Form>
+
+      <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+        <Button
+          icon={<ReloadOutlined />}
+          onClick={handleReset}
+          loading={loading}
+        >
+          重置为默认
+        </Button>
+        <Button
+          type="primary"
+          icon={<SaveOutlined />}
+          onClick={handleSave}
+          loading={loading}
+        >
+          保存设置
+        </Button>
+      </div>
+
       <Modal
         title={masterMode === 'remove' ? '关闭主密码' : securityState?.hasMasterPassword ? '修改主密码' : '设置主密码'}
         open={masterModalVisible}
@@ -932,7 +1012,6 @@ useEffect(() => {
           )}
         </Form>
       </Modal>
-      <ImportExportModal visible={exportModalVisible} onClose={() => setExportModalVisible(false)} />
     </div>
   );
 };

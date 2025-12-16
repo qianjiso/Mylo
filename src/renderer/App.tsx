@@ -799,6 +799,7 @@ const App: React.FC = () => {
         onCancel={() => setSettingsVisible(false)}
         footer={null}
         width={1000}
+        style={{ top: 32 }}
         destroyOnHidden
       >
         <React.Suspense fallback={<div>正在加载设置...</div>}>
