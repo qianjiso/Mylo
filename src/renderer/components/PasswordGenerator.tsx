@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, Form, InputNumber, Switch, Button, Input, message } from 'antd';
+import { reportError } from '../utils/logging';
 
 interface PasswordGeneratorProps {
   visible: boolean;
@@ -57,7 +58,7 @@ const PasswordGenerator: React.FC<PasswordGeneratorProps> = ({
       setGeneratedPassword(password);
     } catch (error) {
       message.error('密码生成失败');
-      console.error('Generate password error:', error);
+      reportError('PASSWORD_GENERATE_FAILED', 'Generate password error', error, values);
     } finally {
       setLoading(false);
     }

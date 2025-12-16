@@ -10,7 +10,7 @@ import { createCrypto } from '../../shared/security/crypto';
 import BackupService from '../services/BackupService';
 import IntegrityService from '../services/IntegrityService';
 import SecurityService from '../services/SecurityService';
- 
+import { logError } from '../logger';
 
 export class DatabaseService {
   private db: Database.Database | null = null;
@@ -31,7 +31,7 @@ export class DatabaseService {
     try {
       this.initializeDatabase();
     } catch (error) {
-      console.error('Failed to initialize database:', error);
+      logError('DB_INIT_FAILED', 'Failed to initialize database', error instanceof Error ? error : undefined);
       throw error;
     }
   }
@@ -53,7 +53,7 @@ export class DatabaseService {
       this.integrityService = new IntegrityService(this.db);
       this.securityService = new SecurityService(this.db, this.settingsService);
     } catch (error) {
-      console.error('Database initialization error:', error);
+      logError('DB_INIT_ERROR', 'Database initialization error', error instanceof Error ? error : undefined);
       throw error;
     }
   }

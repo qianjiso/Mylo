@@ -60,6 +60,14 @@ export interface ElectronAPI {
   toggleMaximizeWindow(): Promise<void>;
   closeWindow(): Promise<void>;
   openExternal(url: string): Promise<void>;
+  // 日志与错误上报
+  reportError?: (payload: {
+    code?: string;
+    message: string;
+    context?: Record<string, unknown>;
+    stack?: string;
+    source?: string;
+  }) => Promise<void>;
   
   // 数据完整性检查
   checkDataIntegrity(): Promise<{
@@ -189,6 +197,8 @@ const electronAPI: ElectronAPI = {
   toggleMaximizeWindow: () => ipcRenderer.invoke('window-toggle-maximize'),
   closeWindow: () => ipcRenderer.invoke('window-close'),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  // 日志与错误上报
+  reportError: (payload) => ipcRenderer.invoke('renderer-report-error', payload),
   
   // 文件操作
   exportData: (options) => ipcRenderer.invoke('export-data', options),

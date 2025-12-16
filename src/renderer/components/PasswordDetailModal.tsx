@@ -17,6 +17,7 @@ import {
   DeleteOutlined
 } from '@ant-design/icons';
 import PasswordGenerator from './PasswordGenerator';
+import { reportError } from '../utils/logging';
 
 const { Title } = Typography;
 const { TextArea } = Input;
@@ -88,7 +89,7 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
       }
       onClose();
     } catch (error) {
-      console.error('保存失败:', error);
+      reportError('PASSWORD_DETAIL_SAVE_FAILED', '保存失败', error);
     } finally {
       setLoading(false);
     }

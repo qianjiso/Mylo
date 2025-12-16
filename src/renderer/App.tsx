@@ -19,6 +19,7 @@ import { usePasswords } from './hooks/usePasswords';
 import { useGroups } from './hooks/useGroups';
 import { useNotes } from './hooks/useNotes';
 import * as securityService from './services/security';
+import { reportError } from './utils/logging';
 
 // 在浏览器环境中导入mock
 if (typeof window !== 'undefined' && !window.electronAPI) {
@@ -129,7 +130,7 @@ const App: React.FC = () => {
           ]);
         }
       } catch (err) {
-        console.error('加载安全状态失败', err);
+        reportError('APP_LOAD_SECURITY_STATE_FAILED', '加载安全状态失败', err);
         setLocked(false);
         await Promise.all([
           loadGroups(),
@@ -234,7 +235,7 @@ const App: React.FC = () => {
         setSecurityState(state);
         setLocked(state.requireMasterPassword ? true : false);
       } catch (err) {
-        console.error('刷新安全状态失败', err);
+        reportError('APP_REFRESH_SECURITY_STATE_FAILED', '刷新安全状态失败', err);
       }
     };
     if (settingsVisibleRef.current && !settingsVisible) {
@@ -280,7 +281,7 @@ const App: React.FC = () => {
       }
     } catch (error) {
       message.error('删除失败');
-      console.error('Delete password error:', error);
+      reportError('APP_DELETE_PASSWORD_FAILED', 'Delete password error', error, { passwordId: id });
     }
   };
 
@@ -312,7 +313,10 @@ const App: React.FC = () => {
       loadPasswords(selectedGroupId);
     } catch (error) {
       message.error(passwordDetailMode === 'create' ? '添加失败' : '更新失败');
-      console.error('Submit error:', error);
+      reportError('APP_SUBMIT_PASSWORD_FAILED', 'Submit password form failed', error, {
+        mode: passwordDetailMode,
+        hasEditingPassword: !!editingPassword,
+      });
     }
   };
 
@@ -342,7 +346,7 @@ const App: React.FC = () => {
       }
     } catch (error) {
       message.error('删除分组失败');
-      console.error('Delete group error:', error);
+      reportError('APP_DELETE_GROUP_FAILED', 'Delete group error', error, { groupId: id });
     }
   };
 
@@ -371,7 +375,9 @@ const App: React.FC = () => {
       setTreeKey(prev => prev + 1);
     } catch (error: any) {
       message.error(error.message || (editingGroup ? '更新分组失败' : '添加分组失败'));
-      console.error('Submit group error:', error);
+      reportError('APP_SUBMIT_GROUP_FAILED', 'Submit group form failed', error, {
+        hasEditingGroup: !!editingGroup,
+      });
     }
   };
 

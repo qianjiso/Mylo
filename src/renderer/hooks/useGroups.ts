@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { message } from 'antd';
 import * as groupService from '../services/groups';
 import type { Group, GroupWithChildren } from '../../shared/types';
+import { reportError } from '../utils/logging';
 
 export function useGroups() {
   const [groups, setGroups] = useState<Group[]>([]);
@@ -15,7 +16,7 @@ export function useGroups() {
       setGroupTree(tree || []);
     } catch (error) {
       message.error('加载分组失败');
-      console.error('Load groups error:', error);
+      reportError('GROUPS_LOAD_FAILED', 'Load groups error', error);
     }
   }, []);
 

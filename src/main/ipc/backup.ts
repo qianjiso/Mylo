@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow, dialog, app } from 'electron';
 import * as fs from 'fs';
 import DatabaseService from '../database/DatabaseService';
+import { logError } from '../logger';
 
 export function registerBackupIpc(db: DatabaseService, win?: BrowserWindow | null) {
   ipcMain.handle('export-data', async (_, options: {
@@ -14,6 +15,12 @@ export function registerBackupIpc(db: DatabaseService, win?: BrowserWindow | nul
       const data = await db.exportData(options);
       return { success: true, data: Array.from(data) };
     } catch (error) {
+      logError('IPC_EXPORT_DATA_FAILED', 'export-data failed', error instanceof Error ? error : undefined, {
+        format: options.format,
+        includeHistory: options.includeHistory,
+        includeGroups: options.includeGroups,
+        includeSettings: options.includeSettings,
+      });
       return { success: false, error: (error as Error).message };
     }
   });
@@ -32,6 +39,10 @@ export function registerBackupIpc(db: DatabaseService, win?: BrowserWindow | nul
       fs.writeFileSync(options.filePath, Buffer.from(data));
       return { success: true, filePath: options.filePath };
     } catch (error) {
+      logError('IPC_EXPORT_DATA_TO_FILE_FAILED', 'export-data-to-file failed', error instanceof Error ? error : undefined, {
+        format: options.format,
+        filePath: options.filePath,
+      });
       return { success: false, error: (error as Error).message };
     }
   });
@@ -50,6 +61,10 @@ export function registerBackupIpc(db: DatabaseService, win?: BrowserWindow | nul
       if (dialogRes.canceled) return { success: true, filePath: null };
       return { success: true, filePath: dialogRes.filePath };
     } catch (error) {
+      logError('IPC_PICK_EXPORT_PATH_FAILED', 'pick-export-path failed', error instanceof Error ? error : undefined, {
+        format: opts.format,
+        defaultPath: opts.defaultPath,
+      });
       return { success: false, error: (error as Error).message };
     }
   });
@@ -66,6 +81,11 @@ export function registerBackupIpc(db: DatabaseService, win?: BrowserWindow | nul
       win?.webContents.send('data-imported', { imported: result.imported, skipped: result.skipped });
       return { success: true, data: result };
     } catch (error) {
+      logError('IPC_IMPORT_DATA_FAILED', 'import-data failed', error instanceof Error ? error : undefined, {
+        mergeStrategy: options.mergeStrategy,
+        validateIntegrity: options.validateIntegrity,
+        dryRun: options.dryRun,
+      });
       return { success: false, error: (error as Error).message };
     }
   });
@@ -75,6 +95,7 @@ export function registerBackupIpc(db: DatabaseService, win?: BrowserWindow | nul
       const result = db.checkDataIntegrity();
       return { success: true, data: result };
     } catch (error) {
+      logError('IPC_CHECK_DATA_INTEGRITY_FAILED', 'check-data-integrity failed', error instanceof Error ? error : undefined);
       return { success: false, error: (error as Error).message };
     }
   });
@@ -84,6 +105,7 @@ export function registerBackupIpc(db: DatabaseService, win?: BrowserWindow | nul
       const result = db.repairDataIntegrity();
       return { success: true, data: result };
     } catch (error) {
+      logError('IPC_REPAIR_DATA_INTEGRITY_FAILED', 'repair-data-integrity failed', error instanceof Error ? error : undefined);
       return { success: false, error: (error as Error).message };
     }
   });
@@ -97,6 +119,9 @@ export function registerBackupIpc(db: DatabaseService, win?: BrowserWindow | nul
       if (dialogRes.canceled) return { success: true, directory: null };
       return { success: true, directory: dialogRes.filePaths[0] };
     } catch (error) {
+      logError('IPC_PICK_EXPORT_DIRECTORY_FAILED', 'pick-export-directory failed', error instanceof Error ? error : undefined, {
+        defaultPath: opts.defaultPath,
+      });
       return { success: false, error: (error as Error).message };
     }
   });

@@ -24,6 +24,7 @@ import * as settingsService from '../services/settings';
 import ImportExportModal from './ImportExportModal';
 import { useBackup } from '../hooks/useBackup';
 import { useIntegrity } from '../hooks/useIntegrity';
+import { reportError } from '../utils/logging';
 import * as securityService from '../services/security';
 import * as backupService from '../services/backup';
 
@@ -135,8 +136,8 @@ useEffect(() => {
       const mapped = mapSettingsToForm(settingsData, secState);
       form.setFieldsValue(mapped);
     } catch (error) {
-      console.error('加载设置失败:', error);
       message.error('加载设置失败');
+      reportError('SETTINGS_LOAD_FAILED', '加载设置失败', error);
     } finally {
       setLoading(false);
     }
@@ -213,8 +214,8 @@ useEffect(() => {
       message.success('设置保存成功');
       if (onClose) onClose();
     } catch (error) {
-      console.error('保存设置失败:', error);
       message.error('保存设置失败');
+      reportError('SETTINGS_SAVE_FAILED', '保存设置失败', error);
     } finally {
       setLoading(false);
     }
@@ -234,8 +235,8 @@ useEffect(() => {
       await loadSecurityState();
       message.success('已重置为默认设置');
     } catch (error) {
-      console.error('重置设置失败:', error);
       message.error('重置设置失败');
+      reportError('SETTINGS_RESET_FAILED', '重置设置失败', error);
     } finally {
       setLoading(false);
     }
@@ -264,9 +265,9 @@ useEffect(() => {
       await exportDataToFile({ ...options, filePath: picked });
       message.success(`已导出到 ${picked}`);
     } catch (error) {
-      console.error('快速导出失败:', error);
       const errMsg = error instanceof Error ? error.message : '快速导出失败';
       message.error(errMsg);
+      reportError('SETTINGS_QUICK_EXPORT_FAILED', '快速导出失败', error);
     }
   };
 
@@ -279,8 +280,8 @@ useEffect(() => {
         form.setFieldsValue({ autoExportDirectory: picked });
       }
     } catch (error) {
-      console.error('选择自动导出目录失败:', error);
       message.error('选择自动导出目录失败');
+      reportError('SETTINGS_PICK_EXPORT_DIRECTORY_FAILED', '选择自动导出目录失败', error);
     } finally {
       setSelectingExportDirectory(false);
     }
@@ -293,8 +294,8 @@ useEffect(() => {
       const warnCount = r.warnings.length;
       message.success(`完整性检查完成，错误 ${errCount}，警告 ${warnCount}`);
     } catch (error) {
-      console.error('完整性检查失败:', error);
       message.error('完整性检查失败');
+      reportError('SETTINGS_CHECK_INTEGRITY_FAILED', '完整性检查失败', error);
     }
   };
 
@@ -303,8 +304,8 @@ useEffect(() => {
       const r = await repair();
       message.success(`修复完成：${r.repaired.length} 条修复，${r.failed.length} 条失败`);
     } catch (error) {
-      console.error('完整性修复失败:', error);
       message.error('完整性修复失败');
+      reportError('SETTINGS_REPAIR_INTEGRITY_FAILED', '完整性修复失败', error);
     }
   };
 
@@ -331,8 +332,8 @@ useEffect(() => {
       message.success(masterMode === 'remove' ? '已关闭主密码' : '主密码已更新');
     } catch (error) {
       const msg = error instanceof Error ? error.message : '操作失败';
-      console.error('主密码操作失败:', error);
       message.error(msg);
+      reportError('SETTINGS_MASTER_PASSWORD_OPERATION_FAILED', '主密码操作失败', error);
       throw error;
     } finally {
       setMasterSaving(false);

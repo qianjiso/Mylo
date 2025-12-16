@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type DatabaseService from '../database/DatabaseService';
 import type { AutoExportConfig, AutoExportFrequency } from '../../shared/types';
+import { logError, logInfo } from '../logger';
 
 export class AutoExportService {
   private db: DatabaseService;
@@ -22,18 +23,6 @@ export class AutoExportService {
 
   public reload(): void {
     const config = this.readConfig();
-    console.info('自动导出配置已加载', {
-      enabled: config.enabled,
-      frequency: config.frequency,
-      directory: config.directory,
-      format: config.format,
-      hasPassword: !!config.archivePassword,
-      lastTime: config.lastTime,
-      timeOfDay: config.timeOfDay,
-      dayOfWeek: config.dayOfWeek,
-      dayOfMonth: config.dayOfMonth,
-      intervalMinutes: config.intervalMinutes,
-    });
     this.applyConfig(config);
   }
 
@@ -57,11 +46,9 @@ export class AutoExportService {
   private applyConfig(config: AutoExportConfig & { lastTime?: string }): void {
     this.stopTimers();
     if (!config.enabled) {
-      console.info('自动导出未启用，跳过计划任务');
       return;
     }
     if (!config.directory || config.directory.trim().length === 0) {
-      console.warn('自动导出已开启，但未设置导出目录，已跳过计划任务');
       this.win?.webContents.send('auto-export-done', { success: false, error: '未设置自动导出目录' });
       return;
     }
@@ -71,10 +58,16 @@ export class AutoExportService {
     const delay = hasLastRun
       ? Math.max(nextMs - nowMs, AutoExportService.FIRST_RUN_DELAY_MS)
       : AutoExportService.FIRST_RUN_DELAY_MS; // 首次开启时尽快执行，避免用户感知“无任务”
-    const nextAt = new Date(nowMs + delay);
-    console.info('自动导出计划已安排', { frequency: config.frequency, nextRunAt: nextAt.toISOString(), delayMs: delay });
+    logInfo('AUTO_EXPORT_SCHEDULED', '自动导出计划已安排', {
+      enabled: config.enabled,
+      frequency: config.frequency,
+      directory: config.directory,
+      format: config.format,
+      hasPassword: !!config.archivePassword,
+      lastTime: config.lastTime,
+      delayMs: delay,
+    });
     this.nextTimer = setTimeout(() => {
-      console.info('自动导出任务触发');
       void this.runOnce(config).finally(() => {
         // 任务执行完成后重新读取配置并重新计算下一次运行时间
         this.reload();
@@ -90,12 +83,7 @@ export class AutoExportService {
   private ensureDirectory(dir?: string): string {
     const targetDir = (dir && dir.trim().length > 0) ? dir : '';
     if (!targetDir) throw new Error('未设置自动导出目录，请先在设置中选择保存位置');
-    try {
-      fs.mkdirSync(targetDir, { recursive: true });
-    } catch (error) {
-      console.error('创建自动导出目录失败', error);
-      throw error;
-    }
+    fs.mkdirSync(targetDir, { recursive: true });
     return targetDir;
   }
 
@@ -192,7 +180,10 @@ export class AutoExportService {
     if (this.isRunning) return;
     this.isRunning = true;
     try {
-      console.info('自动导出开始执行', { format: config.format, frequency: config.frequency });
+      logInfo('AUTO_EXPORT_START', '自动导出开始执行', {
+        format: config.format,
+        frequency: config.frequency,
+      });
       if (config.format === 'encrypted_zip' && (!config.archivePassword || config.archivePassword.length < 4)) {
         throw new Error('自动导出为加密ZIP时需要至少4位的密码');
       }
@@ -210,9 +201,12 @@ export class AutoExportService {
       fs.writeFileSync(filePath, Buffer.from(data));
       this.updateLastRun();
       this.win?.webContents.send('auto-export-done', { success: true, filePath });
-      console.info('自动导出完成', filePath);
+      logInfo('AUTO_EXPORT_SUCCESS', '自动导出完成', { filePath });
     } catch (error) {
-      console.error('自动导出失败', error);
+      logError('AUTO_EXPORT_FAILED', '自动导出失败', error instanceof Error ? error : undefined, {
+        directory: config.directory,
+        format: config.format,
+      });
       this.win?.webContents.send('auto-export-done', { success: false, error: (error as Error).message });
     } finally {
       this.isRunning = false;
@@ -222,9 +216,8 @@ export class AutoExportService {
   private updateLastRun(): void {
     try {
       this.db.getSettingsService().updateUserSetting('backup.auto_export_last_time', new Date().toISOString());
-      console.info('自动导出更新时间已写入');
-    } catch (error) {
-      console.warn('更新自动导出时间失败', error);
+    } catch {
+      // ignore update last run time error
     }
   }
 

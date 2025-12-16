@@ -17,6 +17,7 @@ import {
   LockOutlined,
   InboxOutlined,
 } from '@ant-design/icons';
+import { reportError } from '../utils/logging';
 
 const { Option } = Select;
 const { Dragger } = Upload;
@@ -57,8 +58,8 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
       URL.revokeObjectURL(url);
       message.success('数据导出成功');
     } catch (error) {
-      console.error('Export error:', error);
       message.error('导出过程中发生错误');
+      reportError('EXPORT_MODAL_EXPORT_FAILED', '导出过程中发生错误', error);
     } finally {
       setLoading(false);
     }
@@ -87,8 +88,8 @@ const ImportExportModal: React.FC<ImportExportModalProps> = ({ visible, onClose 
       });
       message.success(`导入成功，共处理 ${result.imported || 0} 条记录`);
     } catch (error) {
-      console.error('Import error:', error);
       message.error('导入过程中发生错误');
+      reportError('EXPORT_MODAL_IMPORT_FAILED', '导入过程中发生错误', error);
     } finally {
       setLoading(false);
     }
