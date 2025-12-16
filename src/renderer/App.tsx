@@ -233,7 +233,14 @@ const App: React.FC = () => {
       try {
         const state = await securityService.getSecurityState();
         setSecurityState(state);
-        setLocked(state.requireMasterPassword ? true : false);
+        const nextLocked = state.requireMasterPassword ? locked : false;
+        setLocked(nextLocked);
+        if (state.requireMasterPassword && !nextLocked) {
+          resetAutoLockTimer();
+        }
+        if (!state.requireMasterPassword && lockTimerRef.current) {
+          clearTimeout(lockTimerRef.current);
+        }
       } catch (err) {
         reportError('APP_REFRESH_SECURITY_STATE_FAILED', '刷新安全状态失败', err);
       }
@@ -242,7 +249,7 @@ const App: React.FC = () => {
       refreshState();
     }
     settingsVisibleRef.current = settingsVisible;
-  }, [settingsVisible]);
+  }, [settingsVisible, locked, resetAutoLockTimer]);
 
   
 

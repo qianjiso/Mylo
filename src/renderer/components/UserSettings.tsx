@@ -7,7 +7,6 @@ import {
   Button,
   Space,
   message,
-  Divider,
   Typography,
   Row,
   Col,
@@ -19,7 +18,7 @@ import {
   Tabs,
   Collapse,
 } from 'antd';
-import { SaveOutlined, ReloadOutlined, SafetyCertificateOutlined, ToolOutlined, CheckCircleOutlined, ToolTwoTone, FolderOpenOutlined, CloudOutlined } from '@ant-design/icons';
+import { SaveOutlined, ReloadOutlined, SafetyCertificateOutlined, ToolOutlined, CheckCircleOutlined, ToolTwoTone, FolderOpenOutlined } from '@ant-design/icons';
 import type { MasterPasswordState, UserSetting } from '../../shared/types';
 import * as settingsService from '../services/settings';
 import { useIntegrity } from '../hooks/useIntegrity';
@@ -45,7 +44,7 @@ const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
   const autoExportIntervalMinutes = Form.useWatch('autoExportIntervalMinutes', form);
   const requireMasterPassword = Form.useWatch('requireMasterPassword', form);
   const autoLockMinutes = Form.useWatch('autoLockMinutes', form);
-  const clipboardClearTime = Form.useWatch('clipboardClearTime', form);
+  const [initialAutoExportEnabled, setInitialAutoExportEnabled] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
   const { checking, repairing, report, repairResult, check, repair } = useIntegrity();
   const [securityState, setSecurityState] = useState<MasterPasswordState | null>(null);
@@ -56,8 +55,10 @@ const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
   const [selectingExportDirectory, setSelectingExportDirectory] = useState(false);
   const [activeTab, setActiveTab] = useState<'security' | 'ui' | 'data'>('security');
   const normalizeExportFormat = useCallback((fmt?: string) => (fmt === 'encrypted_zip' ? 'encrypted_zip' : 'json'), []);
+  const autoExportStatus = (autoExportEnabled ?? initialAutoExportEnabled) ?? false;
+
   const autoExportSummary = useMemo(() => {
-    if (!autoExportEnabled) return '自动导出未开启';
+    if (!autoExportStatus) return '自动导出未开启';
     const directory = autoExportDirectory || '未选择目录';
     const weekMap: Record<number, string> = { 1: '周一', 2: '周二', 3: '周三', 4: '周四', 5: '周五', 6: '周六', 7: '周日' };
     const timeText = autoExportTimeOfDay || '02:00';
@@ -73,7 +74,7 @@ const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
       return `每月${dayOfMonthText} 日 ${timeText} · ${directory}`;
     }
     return `每日 ${timeText} · ${directory}`;
-  }, [autoExportEnabled, autoExportDirectory, autoExportFrequency, autoExportIntervalMinutes, autoExportDayOfMonth, autoExportDayOfWeek, autoExportTimeOfDay]);
+  }, [autoExportDirectory, autoExportFrequency, autoExportIntervalMinutes, autoExportDayOfMonth, autoExportDayOfWeek, autoExportStatus, autoExportTimeOfDay]);
   const securitySummary = useMemo(() => {
     const lock = Math.max(1, Number(autoLockMinutes || 5));
     if (securityState?.hasMasterPassword) {
@@ -81,7 +82,6 @@ const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
     }
     return `主密码未设置 · ${lock} 分钟自动锁定`;
   }, [autoLockMinutes, requireMasterPassword, securityState]);
-  const clipboardSummary = useMemo(() => `剪贴板 ${clipboardClearTime ?? 30} 秒后清除`, [clipboardClearTime]);
 
   const mapSettingsToForm = useCallback((settingsData: UserSetting[], secState: MasterPasswordState | null) => {
     const formData: Record<string, any> = {};
@@ -104,7 +104,6 @@ const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
       if (key === 'backup.auto_export_day_of_week') key = 'autoExportDayOfWeek';
       if (key === 'backup.auto_export_day_of_month') key = 'autoExportDayOfMonth';
       if (key === 'backup.auto_export_interval_minutes') key = 'autoExportIntervalMinutes';
-      if (key === 'security.clipboard_clear_timeout') key = 'clipboardClearTime';
       if (setting.type === 'boolean') {
         formData[key] = setting.value === 'true';
       } else if (setting.type === 'number') {
@@ -120,12 +119,8 @@ const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
       // 再按需覆盖 UI 与安全相关的默认值
       theme: formData.theme || 'auto',
       language: formData.language || 'zh-CN',
-      showPasswordStrength: formData.showPasswordStrength ?? true,
-      autoSave: formData.autoSave ?? false,
       uiListDensity: formData.uiListDensity || 'comfortable',
       uiFontSize: formData.uiFontSize || 'normal',
-      uiCompactSidebar: formData.uiCompactSidebar ?? false,
-      uiShowQuickActions: formData.uiShowQuickActions ?? true,
       exportDefaultPassword: formData.exportDefaultPassword || '',
       exportFormat: normalizedExportFormat,
       autoExportEnabled: formData.autoExportEnabled ?? false,
@@ -138,7 +133,6 @@ const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
       autoExportIntervalMinutes: formData.autoExportIntervalMinutes ?? 60,
       requireMasterPassword: secState?.requireMasterPassword ?? formData.requireMasterPassword ?? false,
       autoLockMinutes: secState?.autoLockMinutes ?? formData.autoLockMinutes ?? 5,
-      clipboardClearTime: formData.clipboardClearTime ?? 30,
       // 密码生成器相关：如有存储值则使用存储值，否则退回到后端默认/内置默认
       'security.password_generator_length': formData['security.password_generator_length'] ?? 16,
       'security.password_generator_include_uppercase': formData['security.password_generator_include_uppercase'] ?? true,
@@ -157,20 +151,21 @@ const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
     });
   }, [form]);
 
-useEffect(() => {
-  const load = async () => {
-    try {
-      setLoading(true);
-      const settingsData = await settingsService.listSettings();
-      const secState = await securityService.getSecurityState();
-      setSecurityState(secState);
-      const mapped = mapSettingsToForm(settingsData, secState);
-      form.setFieldsValue(mapped);
-    } catch (error) {
-      message.error('加载设置失败');
-      reportError('SETTINGS_LOAD_FAILED', '加载设置失败', error);
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true);
+        const settingsData = await settingsService.listSettings();
+        const secState = await securityService.getSecurityState();
+        setSecurityState(secState);
+        const mapped = mapSettingsToForm(settingsData, secState);
+        form.setFieldsValue(mapped);
+        setInitialAutoExportEnabled(!!mapped.autoExportEnabled);
+      } catch (error) {
+        message.error('加载设置失败');
+        reportError('SETTINGS_LOAD_FAILED', '加载设置失败', error);
+      } finally {
+        setLoading(false);
     }
   };
   load();
@@ -197,9 +192,6 @@ useEffect(() => {
         const seconds = Math.max(1, Number(values.autoLockMinutes)) * 60;
         await settingsService.setSetting('security.auto_lock_timeout', String(seconds), 'number', 'security', '自动锁定时间（秒）');
       }
-      if (values.clipboardClearTime != null) {
-        await settingsService.setSetting('security.clipboard_clear_timeout', String(values.clipboardClearTime), 'number', 'security', '剪贴板自动清除时间（秒）');
-      }
       if (typeof values.requireMasterPassword === 'boolean') {
         await securityService.setRequireMasterPassword(values.requireMasterPassword);
       }
@@ -215,7 +207,6 @@ useEffect(() => {
           'exportFormat',
           'exportDefaultPassword',
           'backupEnabled',
-          'clipboardClearTime',
           'autoExportTimeOfDay',
           'autoExportDayOfWeek',
           'autoExportDayOfMonth',
@@ -263,6 +254,7 @@ useEffect(() => {
       setSecurityState(secState);
       const mapped = mapSettingsToForm(settingsData, secState);
       form.setFieldsValue(mapped);
+      setInitialAutoExportEnabled(!!mapped.autoExportEnabled);
       await loadSecurityState();
       message.success('已重置为默认设置');
     } catch (error) {
@@ -508,31 +500,6 @@ useEffect(() => {
             <Row gutter={12}>
               <Col span={12}>
                 <Form.Item
-                  label="显示密码强度"
-                  name="showPasswordStrength"
-                  valuePropName="checked"
-                  tooltip="在密码输入框下方显示密码强度指示器"
-                  style={{ marginBottom: 12 }}
-                >
-                  <Switch />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item
-                  label="自动保存"
-                  name="autoSave"
-                  valuePropName="checked"
-                  tooltip="编辑时自动保存密码"
-                  style={{ marginBottom: 12 }}
-                >
-                  <Switch />
-                </Form.Item>
-              </Col>
-            </Row>
-
-            <Row gutter={12}>
-              <Col span={12}>
-                <Form.Item
                   label="列表密度"
                   name="uiListDensity"
                   tooltip="影响表格、列表等组件的间距"
@@ -559,31 +526,6 @@ useEffect(() => {
                 </Form.Item>
               </Col>
             </Row>
-
-            <Row gutter={12}>
-              <Col span={12}>
-                <Form.Item
-                  label="侧边栏紧凑模式"
-                  name="uiCompactSidebar"
-                  valuePropName="checked"
-                  tooltip="减少侧边栏宽度，更多空间留给内容区"
-                  style={{ marginBottom: 0 }}
-                >
-                  <Switch />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item
-                  label="显示快捷操作按钮"
-                  name="uiShowQuickActions"
-                  valuePropName="checked"
-                  tooltip="在列表行内显示常用操作按钮"
-                  style={{ marginBottom: 0 }}
-                >
-                  <Switch />
-                </Form.Item>
-              </Col>
-            </Row>
           </Card>
         </Space>
       ),
@@ -595,7 +537,20 @@ useEffect(() => {
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
           <Row gutter={16}>
             <Col span={14}>
-              <Card size="small" title="导出与自动备份" extra={<Tag color="geekblue">计划</Tag>} headStyle={{ fontWeight: 600 }}>
+              <Card
+                size="small"
+                title="导出与自动备份"
+                extra={
+                  <Form.Item
+                    name="autoExportEnabled"
+                    valuePropName="checked"
+                    style={{ marginBottom: 0 }}
+                  >
+                    <Switch size="small" checkedChildren="自动导出" unCheckedChildren="自动导出" />
+                  </Form.Item>
+                }
+                headStyle={{ fontWeight: 600 }}
+              >
                 <Row gutter={12}>
                   <Col span={12}>
                     <Form.Item
@@ -611,12 +566,13 @@ useEffect(() => {
                   </Col>
                   <Col span={12}>
                     <Form.Item
-                      label="启用自动导出"
-                      name="autoExportEnabled"
-                      valuePropName="checked"
+                      label="加密ZIP默认密码"
+                      name="exportDefaultPassword"
+                      tooltip="用于加密ZIP导出，至少4位。未设置则无法快速导出加密包。"
+                      rules={[{ min: 4, message: '至少4位' }]}
                       style={{ marginBottom: 12 }}
                     >
-                      <Switch />
+                      <Input.Password placeholder="可选，至少4位" disabled={!autoExportEnabled} />
                     </Form.Item>
                   </Col>
                 </Row>
@@ -756,41 +712,6 @@ useEffect(() => {
                   </Row>
                 )}
 
-                <Row gutter={12}>
-                  <Col span={12}>
-                    <Form.Item
-                      label="加密ZIP默认密码"
-                      name="exportDefaultPassword"
-                      tooltip="用于加密ZIP导出，至少4位。未设置则无法快速导出加密包。"
-                      rules={[{ min: 4, message: '至少4位' }]}
-                      style={{ marginBottom: 12 }}
-                    >
-                      <Input.Password placeholder="可选，至少4位" />
-                    </Form.Item>
-                  </Col>
-                  <Col span={12}>
-                    <Form.Item
-                      label="剪贴板清除时间（秒）"
-                      name="clipboardClearTime"
-                      tooltip="复制密码到剪贴板后，多长时间自动清除"
-                      style={{ marginBottom: 12 }}
-                    >
-                      <InputNumber
-                        min={5}
-                        max={300}
-                        style={{ width: '100%' }}
-                        placeholder="30"
-                      />
-                    </Form.Item>
-                  </Col>
-                </Row>
-
-                <Space style={{ marginTop: 4 }} size={8}>
-                  <Button icon={<CloudOutlined />} disabled>
-                    云盘备份（待开发）
-                  </Button>
-                  <Tag color="default">即将推出</Tag>
-                </Space>
               </Card>
             </Col>
             <Col span={10}>
@@ -814,14 +735,9 @@ useEffect(() => {
                   <div>
                     <Typography.Text strong>自动导出</Typography.Text>
                     <br />
-                    <Typography.Text style={{ color: autoExportEnabled ? '#389e0d' : '#8c8c8c' }}>
+                    <Typography.Text style={{ color: autoExportStatus ? '#389e0d' : '#8c8c8c' }}>
                       {autoExportSummary}
                     </Typography.Text>
-                  </div>
-                  <div>
-                    <Typography.Text strong>安全与剪贴板</Typography.Text>
-                    <br />
-                    <Typography.Text type="secondary">{clipboardSummary}</Typography.Text>
                   </div>
                   <Collapse
                     ghost
@@ -904,26 +820,16 @@ useEffect(() => {
           </div>
           <Space size="small">
             <Tag color={securityState?.hasMasterPassword ? 'green' : 'orange'}>{securityState?.hasMasterPassword ? '主密码已开启' : '主密码未开启'}</Tag>
-            <Tag color={autoExportEnabled ? 'blue' : 'default'}>{autoExportEnabled ? '自动导出开启' : '自动导出关闭'}</Tag>
+            <Tag color={autoExportStatus ? 'blue' : 'default'}>{autoExportStatus ? '自动导出开启' : '自动导出关闭'}</Tag>
           </Space>
         </div>
       </Card>
-
-      <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-        <Space size="small" wrap>
-          <Typography.Text type="secondary">{securitySummary}</Typography.Text>
-          <Divider type="vertical" style={{ margin: '0 8px' }} />
-          <Typography.Text type="secondary">{autoExportSummary}</Typography.Text>
-          <Divider type="vertical" style={{ margin: '0 8px' }} />
-          <Typography.Text type="secondary">{clipboardSummary}</Typography.Text>
-        </Space>
-      </div>
 
       <Form
         form={form}
         layout="vertical"
         size="middle"
-        style={{ marginTop: 12 }}
+        style={{ marginTop: 16 }}
       >
         <Tabs
           activeKey={activeTab}
