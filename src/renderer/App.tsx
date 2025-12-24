@@ -276,6 +276,18 @@ const App: React.FC = () => {
     }
   };
 
+  const handleView = async (record: Password) => {
+    try {
+      const full = await window.electronAPI.getPassword(record.id);
+      const pw = full || record;
+      setEditingPassword(pw as any);
+    } catch {
+      setEditingPassword(record);
+    }
+    setPasswordDetailMode('view');
+    setModalVisible(true);
+  };
+
 
   const handleDelete = async (id: number) => {
     try {
@@ -695,6 +707,7 @@ const App: React.FC = () => {
         password={editingPassword}
         groups={groups}
         mode={passwordDetailMode}
+        onEdit={handleEdit}
         onClose={() => setModalVisible(false)}
         onSave={handleSubmit}
         onDelete={handleDelete}
@@ -866,7 +879,7 @@ const App: React.FC = () => {
               { title: '标题', dataIndex: 'title' },
               { title: '用户名', dataIndex: 'username' },
               { title: '分组', dataIndex: 'group_id', render: (gid: number) => { const g = groups.find(x => x.id === gid); return g ? g.name : '未分组'; } },
-              { title: '操作', render: (_: any, row: any) => (<Button size="small" onClick={() => { setCurrentModule('password'); setEditingPassword(row); setPasswordDetailMode('view'); setModalVisible(true); setGlobalSearchVisible(false); }}>打开</Button>) }
+              { title: '操作', render: (_: any, row: any) => (<Button size="small" onClick={() => { setCurrentModule('password'); handleView(row); setGlobalSearchVisible(false); }}>打开</Button>) }
             ]} />
           ) },
           { key: 'nt', label: `便笺（${globalSearchNotes.length}）`, children: (

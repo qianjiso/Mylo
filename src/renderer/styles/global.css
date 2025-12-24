@@ -84,6 +84,21 @@ html, body {
   max-width: 520px;
   
 }
+
+.readonly-input,
+.readonly-input.ant-input,
+.readonly-input.ant-input-affix-wrapper,
+.readonly-input.ant-input-password {
+  background-color: #f5f5f5;
+}
+
+.readonly-input .ant-input,
+.readonly-input.ant-input,
+.readonly-input textarea.ant-input,
+.readonly-input.ant-input-password input {
+  color: rgba(0, 0, 0, 0.65);
+  cursor: text;
+}
 .header-center .ant-input-affix-wrapper {
   border-radius: 999px;
   background-color: #f5f6f8;

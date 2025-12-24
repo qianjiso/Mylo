@@ -293,16 +293,21 @@ export class PasswordService {
 
   /** 使用 FTS5 进行全文搜索（按更新时间排序） */
   public searchPasswords(keyword: string): PasswordItem[] {
-    const stmt = this.db.prepare(
-      `SELECT p.* FROM passwords p JOIN passwords_fts fts ON p.id = fts.rowid WHERE passwords_fts MATCH ? ORDER BY p.updated_at DESC`
-    );
-    const q = keyword.includes(' ') ? `"${keyword}"` : keyword;
-    const ftsRows = stmt.all(q) as PasswordItem[];
+    const trimmed = keyword.trim();
+    if (!trimmed) return [];
+    const useLike = /[\u3400-\u9fff]/.test(trimmed);
+    const ftsRows = useLike
+      ? (this.db.prepare(
+        'SELECT * FROM passwords WHERE title LIKE ? OR url LIKE ? OR notes LIKE ? ORDER BY updated_at DESC'
+      ).all(`%${trimmed}%`, `%${trimmed}%`, `%${trimmed}%`) as PasswordItem[])
+      : (this.db.prepare(
+        `SELECT p.* FROM passwords p JOIN passwords_fts fts ON p.id = fts.rowid WHERE passwords_fts MATCH ? ORDER BY p.updated_at DESC`
+      ).all(trimmed.includes(' ') ? `"${trimmed}"` : trimmed) as PasswordItem[]);
     const allRows = this.db.prepare('SELECT * FROM passwords').all() as PasswordItem[];
     const unameMatches = allRows.filter(p => {
       const unameRaw = p.username;
       const unamePlain = this.isEnc(unameRaw) ? this.crypto.decrypt(unameRaw as any) : (unameRaw || '');
-      return unamePlain && unamePlain.toLowerCase().includes(keyword.toLowerCase());
+      return unamePlain && unamePlain.toLowerCase().includes(trimmed.toLowerCase());
     });
     const mergedMap = new Map<number, PasswordItem>();
     for (const r of [...ftsRows, ...unameMatches]) {
@@ -333,9 +338,16 @@ export class PasswordService {
   }): PasswordItem[] {
     let query = 'SELECT * FROM passwords WHERE 1=1';
     const params: any[] = [];
-    if (options.keyword && options.keyword.trim()) {
-      query += ` AND id IN (SELECT rowid FROM passwords_fts WHERE passwords_fts MATCH ?)`;
-      params.push(options.keyword.includes(' ') ? `"${options.keyword}"` : options.keyword);
+    const keyword = options.keyword?.trim();
+    if (keyword) {
+      const useLike = /[\u3400-\u9fff]/.test(keyword);
+      if (useLike) {
+        query += ' AND (title LIKE ? OR url LIKE ? OR notes LIKE ?)';
+        params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
+      } else {
+        query += ' AND id IN (SELECT rowid FROM passwords_fts WHERE passwords_fts MATCH ?)';
+        params.push(keyword.includes(' ') ? `"${keyword}"` : keyword);
+      }
     }
     if (options.title) { query += ' AND title LIKE ?'; params.push(`%${options.title}%`); }
     // username 采用应用层匹配，避免明文进入索引

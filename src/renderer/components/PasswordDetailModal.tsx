@@ -31,6 +31,7 @@ interface PasswordDetailModalProps {
   onClose: () => void;
   onSave: (password: any) => void;
   onDelete: (id: number) => void;
+  onEdit?: (password: any) => void;
   mode: 'view' | 'edit' | 'create';
 }
 
@@ -41,6 +42,7 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
   onClose,
   onSave,
   onDelete,
+  onEdit,
   mode
 }) => {
   const [form] = Form.useForm();
@@ -125,6 +127,7 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
   };
 
   const isReadonly = mode === 'view';
+  const readonlyInputClass = isReadonly ? 'readonly-input' : undefined;
 
   return (
     <>
@@ -152,8 +155,9 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
                 type="default" 
                 icon={<EditOutlined />}
                 onClick={() => {
-                  // 切换到编辑模式
-                  // 这里需要父组件处理模式切换
+                  if (password && onEdit) {
+                    onEdit(password);
+                  }
                 }}
               >
                 编辑
@@ -185,6 +189,7 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
                     <Input
                       placeholder="请输入密码标题"
                       readOnly={isReadonly}
+                      className={readonlyInputClass}
                     />
                   </Form.Item>
                 </Col>
@@ -200,6 +205,7 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
                     <Input 
                       placeholder="请输入用户名"
                       readOnly={isReadonly}
+                      className={readonlyInputClass}
                       onClick={() => {
                         if (!isReadonly) return;
                         const value = form.getFieldValue('username');
@@ -230,6 +236,7 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
                     <Input.Password
                       placeholder="请输入密码"
                       readOnly={isReadonly}
+                      className={readonlyInputClass}
                       onClick={() => {
                         if (!isReadonly) return;
                         const value = form.getFieldValue('password');
@@ -270,6 +277,7 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
                     <Input 
                       placeholder="请输入网址"
                       readOnly={isReadonly}
+                      className={readonlyInputClass}
                       onClick={() => {
                         if (!isReadonly) return;
                         const value = form.getFieldValue('url');
@@ -326,6 +334,7 @@ const PasswordDetailModal: React.FC<PasswordDetailModalProps> = ({
                       placeholder="请输入备注信息" 
                       rows={3}
                       readOnly={isReadonly}
+                      className={readonlyInputClass}
                       maxLength={1000}
                       showCount
                     />

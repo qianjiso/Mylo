@@ -10,6 +10,8 @@ export class AutoExportService {
   private win?: BrowserWindow | null;
   private nextTimer: NodeJS.Timeout | null = null;
   private isRunning = false;
+  private lastScheduleSignature: string | null = null;
+  private lastEnabled: boolean | null = null;
   private static readonly FIRST_RUN_DELAY_MS = 5 * 1000;
 
   constructor(db: DatabaseService, win?: BrowserWindow | null) {
@@ -46,8 +48,14 @@ export class AutoExportService {
   private applyConfig(config: AutoExportConfig & { lastTime?: string }): void {
     this.stopTimers();
     if (!config.enabled) {
+      if (this.lastEnabled) {
+        logInfo('AUTO_EXPORT_DISABLED', '自动导出已关闭');
+      }
+      this.lastEnabled = false;
+      this.lastScheduleSignature = null;
       return;
     }
+    this.lastEnabled = true;
     if (!config.directory || config.directory.trim().length === 0) {
       this.win?.webContents.send('auto-export-done', { success: false, error: '未设置自动导出目录' });
       return;
@@ -58,15 +66,19 @@ export class AutoExportService {
     const delay = hasLastRun
       ? Math.max(nextMs - nowMs, AutoExportService.FIRST_RUN_DELAY_MS)
       : AutoExportService.FIRST_RUN_DELAY_MS; // 首次开启时尽快执行，避免用户感知“无任务”
-    logInfo('AUTO_EXPORT_SCHEDULED', '自动导出计划已安排', {
-      enabled: config.enabled,
-      frequency: config.frequency,
-      directory: config.directory,
-      format: config.format,
-      hasPassword: !!config.archivePassword,
-      lastTime: config.lastTime,
-      delayMs: delay,
-    });
+    const scheduleSignature = this.buildScheduleSignature(config);
+    if (this.lastScheduleSignature !== scheduleSignature) {
+      logInfo('AUTO_EXPORT_SCHEDULED', '自动导出计划已安排', {
+        enabled: config.enabled,
+        frequency: config.frequency,
+        directory: config.directory,
+        format: config.format,
+        hasPassword: !!config.archivePassword,
+        lastTime: config.lastTime,
+        delayMs: delay,
+      });
+    }
+    this.lastScheduleSignature = scheduleSignature;
     this.nextTimer = setTimeout(() => {
       void this.runOnce(config).finally(() => {
         // 任务执行完成后重新读取配置并重新计算下一次运行时间
@@ -78,6 +90,20 @@ export class AutoExportService {
   private stopTimers(): void {
     if (this.nextTimer) clearTimeout(this.nextTimer);
     this.nextTimer = null;
+  }
+
+  private buildScheduleSignature(config: AutoExportConfig): string {
+    return JSON.stringify({
+      enabled: config.enabled,
+      frequency: config.frequency,
+      directory: config.directory,
+      format: config.format,
+      hasPassword: !!config.archivePassword,
+      timeOfDay: config.timeOfDay,
+      dayOfWeek: config.dayOfWeek,
+      dayOfMonth: config.dayOfMonth,
+      intervalMinutes: config.intervalMinutes,
+    });
   }
 
   private ensureDirectory(dir?: string): string {

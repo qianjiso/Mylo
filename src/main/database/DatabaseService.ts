@@ -730,7 +730,13 @@ export class DatabaseService {
       throw new Error('设置键名格式不正确，应使用小写字母、数字、下划线和点');
     }
     
-    if (!setting.value && setting.value !== '0') {
+    const allowEmptyKeys = new Set([
+      'backup.auto_export_directory',
+      'backup.auto_export_password',
+      'backup.auto_export_last_time',
+    ]);
+    const isEmpty = setting.value === '' || setting.value == null;
+    if (isEmpty && !allowEmptyKeys.has(setting.key)) {
       throw new Error('设置值不能为空');
     }
     if (setting.value.length > 10000) {

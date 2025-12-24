@@ -215,14 +215,11 @@ const UserSettings: React.FC<UserSettingsProps> = ({ onClose }) => {
         if (value === undefined) continue;
         await settingsService.setSetting(key, String(value));
       }
-      await settingsService.setSetting('exportFormat', exportFormat, 'string', 'backup', '默认导出格式');
       await settingsService.setSetting('backup.auto_export_format', exportFormat, 'string', 'backup', '自动导出格式');
-      await settingsService.setSetting('exportDefaultPassword', values.exportDefaultPassword || '', 'string', 'backup', '加密ZIP默认密码');
       await settingsService.setSetting('backup.auto_export_password', values.exportDefaultPassword || '', 'string', 'backup', '自动导出压缩包密码');
       await settingsService.setSetting('backup.auto_export_directory', values.autoExportDirectory || '', 'string', 'backup', '自动导出目录');
       await settingsService.setSetting('backup.auto_export_enabled', String(autoExportEnabled), 'boolean', 'backup', '是否开启自动导出');
       await settingsService.setSetting('backup.auto_export_frequency', values.autoExportFrequency || 'daily', 'string', 'backup', '自动导出频率');
-      await settingsService.setSetting('backupEnabled', String(autoExportEnabled), 'boolean', 'backup', '自动导出开关（兼容）');
       // 自动导出时间配置
       const timeOfDay = values.autoExportTimeOfDay || '02:00';
       await settingsService.setSetting('backup.auto_export_time_of_day', timeOfDay, 'string', 'backup', '自动导出时间（每日/每周/每月，格式 HH:mm）');
