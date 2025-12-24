@@ -48,3 +48,46 @@ jobs:
           name: mylo-win-release
           path: |
             release/**
+
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('**/package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build macOS package
+        run: npm run dist:mac
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      - name: Upload artifacts (dist)
+        uses: actions/upload-artifact@v4
+        with:
+          name: mylo-mac-dist
+          path: |
+            dist/**
+
+      - name: Upload artifacts (release)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mylo-mac-release
+          path: |
+            release/**
